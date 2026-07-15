@@ -1,0 +1,24 @@
+{
+  "name": "CommuterConnect",
+  "short_name": "CommuterConnect",
+  "description": "Book a ride or drive for Calbayog City's tricycle, timbol, and multicab network.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#123A2B",
+  "theme_color": "#123A2B",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
