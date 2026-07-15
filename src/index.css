@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --green:        #2E7D32;
+  --green-dark:   #1B5E20;
+  --green-light:  #E8F5E9;
+  --cta:          #E84C27;
+  --navy:         #111111;
+  --sub:          #555555;
+  --surface:      #F5F5F5;
+  --border:       #E0E0E0;
+  --card-bg:      #FFFFFF;
+}
+
+@layer utilities {
+  .page-enter { animation: fadeUp 0.25s ease-out both; }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes cc-spin { to { transform: rotate(360deg); } }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-green text-white font-bold rounded-2xl px-5 py-2.5 text-sm
+           hover:bg-green-dark active:scale-95 transition-all disabled:opacity-50;
+  }
+  .btn-outline {
+    @apply border border-green text-green font-bold rounded-2xl px-5 py-2.5 text-sm
+           hover:bg-green-light active:scale-95 transition-all;
+  }
+  .btn-cta {
+    @apply bg-cta text-white font-bold rounded-2xl px-5 py-2.5 text-sm
+           hover:opacity-90 active:scale-95 transition-all disabled:opacity-50;
+  }
+  .card {
+    @apply bg-white rounded-card border border-border shadow-sm;
+  }
+  .field-input {
+    @apply w-full h-12 px-4 bg-surface border border-border rounded-xl text-sm
+           text-navy outline-none focus:border-green transition-colors;
+  }
+  .field-label {
+    @apply text-[10px] font-bold uppercase tracking-widest text-sub mb-1.5 block;
+  }
+  .badge-green  { @apply bg-green-light text-green text-[10px] font-bold px-2.5 py-0.5 rounded-full; }
+  .badge-amber  { @apply bg-amber-50 text-amber-700 text-[10px] font-bold px-2.5 py-0.5 rounded-full; }
+  .badge-red    { @apply bg-red-50 text-red-700 text-[10px] font-bold px-2.5 py-0.5 rounded-full; }
+  .badge-blue   { @apply bg-blue-50 text-blue-700 text-[10px] font-bold px-2.5 py-0.5 rounded-full; }
+  .badge-gray   { @apply bg-gray-100 text-gray-600 text-[10px] font-bold px-2.5 py-0.5 rounded-full; }
+}
