@@ -82,7 +82,7 @@ export default function NotificationBell() {
   if (!profile?.id) return null
 
   return (
-    <div className="fixed top-4 right-4 z-50" ref={panelRef}>
+    <div className="fixed bottom-24 right-4 z-50" ref={panelRef}>
       <button
         onClick={() => setOpen(o => !o)}
         className="relative w-11 h-11 bg-white rounded-full shadow-lg border border-border flex items-center justify-center active:scale-95 transition-transform"
@@ -97,7 +97,7 @@ export default function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute top-14 right-0 w-[320px] max-h-[70vh] bg-white rounded-2xl shadow-2xl border border-border overflow-hidden flex flex-col">
+        <div className="absolute bottom-14 right-0 w-[320px] max-h-[60vh] bg-white rounded-2xl shadow-2xl border border-border overflow-hidden flex flex-col">
           <div className="flex items-center justify-between px-4 py-3 border-b border-border">
             <p className="font-black text-navy text-sm">Notifications</p>
             <div className="flex items-center gap-2">
