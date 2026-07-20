@@ -32,7 +32,7 @@ export default function AppLayout({ children }) {
       {showFloat && (
         <button
           onClick={() => navigate('/routes')}
-          className="fixed bottom-[82px] left-1/2 -translate-x-[58%] z-40
+          className="fixed bottom-[82px] left-1/2 -translate-x-1/2 z-40
                      flex items-center gap-2 bg-green text-white
                      pl-1.5 pr-3 py-1.5 rounded-full
                      shadow-[0_8px_24px_rgba(46,125,50,0.5)]
