@@ -32,21 +32,21 @@ export default function AppLayout({ children }) {
       {showFloat && (
         <button
           onClick={() => navigate('/routes')}
-          className="fixed bottom-[82px] left-1/2 -translate-x-1/2 z-40
-                     flex items-center gap-3 bg-green text-white
-                     pl-2 pr-4 py-2 rounded-full
-                     shadow-[0_8px_30px_rgba(46,125,50,0.5)]
+          className="fixed bottom-[82px] left-1/2 -translate-x-[58%] z-40
+                     flex items-center gap-2 bg-green text-white
+                     pl-1.5 pr-3 py-1.5 rounded-full
+                     shadow-[0_8px_24px_rgba(46,125,50,0.5)]
                      active:scale-95 transition-all hover:bg-green-dark"
-          style={{ width: 'min(320px, calc(100vw - 40px))' }}
+          style={{ width: 'min(240px, calc(100vw - 100px))' }}
         >
-          <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
-            <Navigation size={18} className="text-white" />
+          <div className="w-7 h-7 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
+            <Navigation size={14} className="text-white" />
           </div>
           <div className="flex-1 text-left">
-            <p className="text-sm font-black leading-tight">Where are you going?</p>
-            <p className="text-[10px] text-white/70">Browse routes in Calbayog</p>
+            <p className="text-xs font-black leading-tight">Where are you going?</p>
+            <p className="text-[9px] text-white/70">Browse routes in Calbayog</p>
           </div>
-          <ChevronRight size={18} className="text-white/60 flex-shrink-0" />
+          <ChevronRight size={15} className="text-white/60 flex-shrink-0" />
         </button>
       )}
 
