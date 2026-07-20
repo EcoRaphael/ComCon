@@ -1,6 +1,7 @@
 // src/components/layout/AppLayout.jsx
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { Home, Search, Clock, User, Navigation, ChevronRight } from 'lucide-react'
+import NotificationBell from '@/components/ui/NotificationBell'
 
 const NAV = [
   { icon: Home,   label: 'Home',     path: '/'          },
@@ -19,6 +20,8 @@ export default function AppLayout({ children }) {
 
   return (
     <div className="min-h-screen bg-surface flex flex-col max-w-md mx-auto relative shadow-2xl">
+
+      <NotificationBell />
 
       {/* Page content */}
       <main className="flex-1 overflow-y-auto pb-20">

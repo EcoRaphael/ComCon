@@ -1,6 +1,7 @@
 // src/components/driver/DriverLayout.jsx
 import { NavLink } from 'react-router-dom'
 import { LayoutDashboard, Ticket, Calendar, User } from 'lucide-react'
+import NotificationBell from '@/components/ui/NotificationBell'
 
 const NAV = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/driver'          },
@@ -12,6 +13,8 @@ const NAV = [
 export default function DriverLayout({ children }) {
   return (
     <div className="min-h-screen bg-surface flex flex-col max-w-md mx-auto relative shadow-2xl">
+
+      <NotificationBell />
       <main className="flex-1 overflow-y-auto pb-20">
         {children}
       </main>
