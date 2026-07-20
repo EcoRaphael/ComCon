@@ -34,6 +34,7 @@ export default function RoutesPage() {
   const [dropoff, setDropoff] = useState('')     // custom dropoff landmark
   const [vehicle, setVehicle] = useState('')
   const [driver, setDriver] = useState(null)
+  const [showDriverProfile, setShowDriverProfile] = useState(false)
   const [method, setMethod] = useState('cash')
 
   useEffect(() => { fetchData() }, [])
@@ -367,16 +368,21 @@ export default function RoutesPage() {
                 </div>
 
                 {/* Driver */}
-                <div className="bg-surface rounded-2xl p-4 flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-full flex items-center justify-center text-white font-black"
+                <button
+                  type="button"
+                  onClick={() => setShowDriverProfile(true)}
+                  className="w-full bg-surface rounded-2xl p-4 flex items-center gap-3 text-left hover:bg-border/40 transition-colors active:scale-[0.99]"
+                >
+                  <div className="w-12 h-12 rounded-full flex items-center justify-center text-white font-black flex-shrink-0"
                     style={{ background: driver.color || '#2E7D32' }}>
                     {driver.name?.split(' ').map(w => w[0]).join('').slice(0, 2)}
                   </div>
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
                     <p className="font-bold text-navy">{driver.name}</p>
                     <p className="text-xs text-sub">{driver.plate} · ★ {Number(driver.rating || 0).toFixed(1)}</p>
                   </div>
-                </div>
+                  <ChevronRight size={18} className="text-sub flex-shrink-0" />
+                </button>
 
                 {/* Payment method */}
                 <div>
@@ -422,6 +428,67 @@ export default function RoutesPage() {
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Driver profile modal — opens when tapping the driver row in Confirm Booking */}
+      {showDriverProfile && driver && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center p-5"
+          onClick={() => setShowDriverProfile(false)}
+        >
+          <div
+            className="bg-white rounded-3xl w-full max-w-sm p-6 relative"
+            onClick={e => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowDriverProfile(false)}
+              className="absolute top-4 right-4 text-sub hover:text-navy"
+            >
+              <X size={20} />
+            </button>
+
+            <div className="flex flex-col items-center text-center pt-2">
+              <div
+                className="w-20 h-20 rounded-full flex items-center justify-center text-white font-black text-2xl mb-3"
+                style={{ background: driver.color || '#2E7D32' }}
+              >
+                {driver.name?.split(' ').map(w => w[0]).join('').slice(0, 2)}
+              </div>
+              <h3 className="text-xl font-black text-navy">{driver.name}</h3>
+              {driver.verified && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-green bg-green-light px-2.5 py-0.5 rounded-full mt-1.5">
+                  ✓ Verified Driver
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 mt-6">
+              <div className="bg-surface rounded-2xl p-3 text-center">
+                <p className="text-[10px] font-bold text-sub uppercase tracking-wider mb-1">Rating</p>
+                <p className="font-black text-navy text-lg">★ {Number(driver.rating || 0).toFixed(1)}</p>
+              </div>
+              <div className="bg-surface rounded-2xl p-3 text-center">
+                <p className="text-[10px] font-bold text-sub uppercase tracking-wider mb-1">Vehicle</p>
+                <p className="font-black text-navy text-sm">{driver.vehicle_type}</p>
+              </div>
+              <div className="bg-surface rounded-2xl p-3 text-center">
+                <p className="text-[10px] font-bold text-sub uppercase tracking-wider mb-1">Plate No.</p>
+                <p className="font-black text-navy text-sm">{driver.plate}</p>
+              </div>
+              <div className="bg-surface rounded-2xl p-3 text-center">
+                <p className="text-[10px] font-bold text-sub uppercase tracking-wider mb-1">Route</p>
+                <p className="font-black text-navy text-sm truncate">{driver.route || 'Anywhere'}</p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowDriverProfile(false)}
+              className="btn-primary w-full py-3.5 mt-6"
+            >
+              Back to Booking
+            </button>
           </div>
         </div>
       )}
