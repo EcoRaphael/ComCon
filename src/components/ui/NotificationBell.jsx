@@ -2,6 +2,9 @@
 // Floating notification bell — shows unread broadcasts/alerts sent
 // from the admin panel. Works for both commuter and driver accounts
 // since it just reads notifications where user_id = the logged-in user.
+//
+// `bottomOffset` lets a screen with its own floating button (e.g. Home's
+// "Where are you going?" pill) push this bell up so they don't overlap.
 import { useState, useEffect, useRef } from 'react'
 import { Bell, X, Clock, CheckCheck, ShieldAlert, Megaphone } from 'lucide-react'
 import { useAuth } from '@/lib/AuthContext'
@@ -22,7 +25,7 @@ const TYPE_COLORS = {
   alert:   'bg-amber-50 text-amber-700',
 }
 
-export default function NotificationBell() {
+export default function NotificationBell({ bottomOffset = 96 }) {
   const { profile } = useAuth()
   const [open, setOpen] = useState(false)
   const [items, setItems] = useState([])
@@ -82,7 +85,7 @@ export default function NotificationBell() {
   if (!profile?.id) return null
 
   return (
-    <div className="fixed bottom-24 right-4 z-50" ref={panelRef}>
+    <div className="fixed right-4 z-50" style={{ bottom: bottomOffset }} ref={panelRef}>
       <button
         onClick={() => setOpen(o => !o)}
         className="relative w-11 h-11 bg-white rounded-full shadow-lg border border-border flex items-center justify-center active:scale-95 transition-transform"

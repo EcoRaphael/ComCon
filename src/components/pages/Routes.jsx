@@ -48,7 +48,6 @@ export default function RoutesPage() {
         .select('id, name, plate, vehicle_type, route, rating, color, status, verified')
         .eq('status', 'active'),
     ])
-    console.log('[Routes] drivers fetched:', driversRes.data, 'error:', driversRes.error)
     setRoutes(routesRes.data || [])
     setFareMatrix(fareRes.data || [])
     setDrivers(driversRes.data || [])

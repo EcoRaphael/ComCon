@@ -21,7 +21,7 @@ export default function AppLayout({ children }) {
   return (
     <div className="min-h-screen bg-surface flex flex-col max-w-md mx-auto relative shadow-2xl">
 
-      <NotificationBell />
+      <NotificationBell bottomOffset={showFloat ? 140 : 96} />
 
       {/* Page content */}
       <main className="flex-1 overflow-y-auto pb-20">
