@@ -1,10 +1,11 @@
 // src/components/auth/LoginPage.jsx
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate, Navigate } from 'react-router-dom'
 import { useAuth } from '@/lib/AuthContext'
 import { useToast } from '@/lib/ToastContext'
-import { Eye, EyeOff, UserCircle2, Bike, ArrowLeft, CheckCircle2 } from 'lucide-react'
+import { Eye, EyeOff, UserCircle2, Bike, ArrowLeft, CheckCircle2, Camera, Image, X } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
+import CameraCapture from '@/components/ui/CameraCapture'
 import { supabase } from '@/lib/supabase/client'
 
 
@@ -369,6 +370,68 @@ function DriverPanel({ onBack, onSwitch }) {
     password: '', confirm: ''
   })
 
+  // Document photos — driver's license, OR (Official Receipt), CR
+  // (Certificate of Registration). Each field holds { file, previewUrl }.
+  // Two explicit options are offered per document: an in-app camera
+  // capture (CameraCapture.jsx, using getUserMedia) and a plain gallery
+  // file picker. A single <input type="file" accept="image/*"> that
+  // *hopes* the OS surfaces a camera option isn't reliable — desktop
+  // browsers largely ignore the `capture` attribute, and behavior varies
+  // across mobile browsers/webviews — so "take a photo" needed to be a
+  // real, guaranteed feature rather than something left to chance.
+  const [docs, setDocs] = useState({ license: null, or: null, cr: null })
+  const [cameraFor, setCameraFor] = useState(null) // which doc key the camera modal is open for
+  const MAX_DOC_MB = 8
+
+  const setDoc = (key, file, previewUrl) => {
+    setError('')
+    setDocs(prev => {
+      if (prev[key]?.previewUrl) URL.revokeObjectURL(prev[key].previewUrl)
+      return { ...prev, [key]: { file, previewUrl } }
+    })
+  }
+
+  const handleDocSelect = (key, file) => {
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setError('Please upload an image file (JPG or PNG).')
+      return
+    }
+    if (file.size > MAX_DOC_MB * 1024 * 1024) {
+      setError(`That image is too large — please keep it under ${MAX_DOC_MB}MB.`)
+      return
+    }
+    setDoc(key, file, URL.createObjectURL(file))
+  }
+
+  const handleCameraCapture = (file, previewUrl) => {
+    setDoc(cameraFor, file, previewUrl)
+    setCameraFor(null)
+  }
+
+  // If getUserMedia fails (permission denied, no camera, etc.), the
+  // camera modal offers "choose from gallery instead" — this triggers a
+  // shared hidden file input for whichever doc key the camera was open
+  // for, captured via closure at the moment the modal was opened.
+  const galleryFallbackRef = useRef(null)
+  const handleFallbackToGallery = () => {
+    const key = cameraFor
+    setTimeout(() => {
+      const input = galleryFallbackRef.current
+      if (input) {
+        input.dataset.forKey = key
+        input.click()
+      }
+    }, 50)
+  }
+
+  const clearDoc = (key) => {
+    setDocs(prev => {
+      if (prev[key]?.previewUrl) URL.revokeObjectURL(prev[key].previewUrl)
+      return { ...prev, [key]: null }
+    })
+  }
+
   const accent = 'focus:border-orange-400'
 
   if (wrongRole) return (
@@ -411,6 +474,8 @@ function DriverPanel({ onBack, onSwitch }) {
       return setError('Name, email, password, plate and vehicle type are required.')
     if (rf.password.length < 8) return setError('Password must be at least 8 characters.')
     if (rf.password !== rf.confirm) return setError('Passwords do not match.')
+    if (!docs.license || !docs.or || !docs.cr)
+      return setError('Please upload photos of your License, OR, and CR — admin needs these to verify your account.')
     setLoading(true)
     try {
       const { data: authData, error: signUpError } = await supabase.auth.signUp({
@@ -441,6 +506,35 @@ function DriverPanel({ onBack, onSwitch }) {
         color: '#E84C27',
       })
       if (driverErr) throw driverErr
+
+      // Upload the 3 document photos to the driver's own storage folder,
+      // then record the resulting paths on their drivers row so admin can
+      // pull up signed URLs to review them before verifying.
+      const uploadDoc = async (key, file) => {
+        const ext = file.name.split('.').pop() || 'jpg'
+        const path = `${userId}/${key}.${ext}`
+        const { error: uploadErr } = await supabase.storage
+          .from('driver-documents')
+          .upload(path, file, { upsert: true, contentType: file.type })
+        if (uploadErr) throw new Error(`Failed to upload ${key.toUpperCase()} photo: ${uploadErr.message}`)
+        return path
+      }
+
+      const [licensePath, orPath, crPath] = await Promise.all([
+        uploadDoc('license', docs.license.file),
+        uploadDoc('or', docs.or.file),
+        uploadDoc('cr', docs.cr.file),
+      ])
+
+      const { error: pathErr } = await supabase.from('drivers')
+        .update({
+          license_photo_path: licensePath,
+          or_photo_path: orPath,
+          cr_photo_path: crPath,
+        })
+        .eq('user_id', userId)
+      if (pathErr) throw pathErr
+
       setDone(true)
     } catch (err) { setError(err.message) }
     finally { setLoading(false) }
@@ -580,6 +674,53 @@ function DriverPanel({ onBack, onSwitch }) {
               </div>
             </div>
 
+            <p className="text-[10px] font-black uppercase tracking-widest text-cta border-b border-orange-100 pb-1 pt-1">Verification Documents</p>
+            <p className="text-[11px] text-sub -mt-1">
+              Take a photo or upload from your gallery — admin reviews these before approving your account.
+            </p>
+            {[
+              { key: 'license', label: "Driver's License *" },
+              { key: 'or',      label: 'OR (Official Receipt) *' },
+              { key: 'cr',      label: 'CR (Certificate of Registration) *' },
+            ].map(({ key, label }) => (
+              <div key={key}>
+                <label className={labelCls}>{label}</label>
+                {docs[key] ? (
+                  <div className="mt-1.5 flex items-center gap-3 bg-surface rounded-2xl p-2.5">
+                    <img src={docs[key].previewUrl} alt={label} className="w-14 h-14 rounded-xl object-cover flex-shrink-0" />
+                    <p className="flex-1 text-xs font-semibold text-navy truncate">{docs[key].file.name}</p>
+                    <button type="button" onClick={() => clearDoc(key)} disabled={loading}
+                      className="p-1.5 text-sub hover:text-red-600 flex-shrink-0">
+                      <X size={16} />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="mt-1.5 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCameraFor(key)}
+                      disabled={loading}
+                      className="flex items-center justify-center gap-2 h-16 border-2 border-dashed border-border rounded-2xl text-sub text-xs font-bold hover:border-orange-300 hover:text-cta transition-colors"
+                    >
+                      <Camera size={16} />
+                      Take Photo
+                    </button>
+                    <label className="flex items-center justify-center gap-2 h-16 border-2 border-dashed border-border rounded-2xl text-sub text-xs font-bold cursor-pointer hover:border-orange-300 hover:text-cta transition-colors">
+                      <Image size={16} />
+                      Gallery
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        disabled={loading}
+                        onChange={e => handleDocSelect(key, e.target.files?.[0])}
+                      />
+                    </label>
+                  </div>
+                )}
+              </div>
+            ))}
+
             <p className="text-[10px] font-black uppercase tracking-widest text-cta border-b border-orange-100 pb-1 pt-1">Account</p>
             <div>
               <label className={labelCls}>Password * (min. 8 chars)</label>
@@ -603,6 +744,25 @@ function DriverPanel({ onBack, onSwitch }) {
       </div>
 
       <p className="text-white/30 text-xs mt-8">CommuterConnect © 2026 · Calbayog City</p>
+
+      {cameraFor && (
+        <CameraCapture
+          onCapture={handleCameraCapture}
+          onClose={() => setCameraFor(null)}
+          onFallbackToGallery={handleFallbackToGallery}
+        />
+      )}
+      <input
+        ref={galleryFallbackRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={e => {
+          const key = e.target.dataset.forKey
+          handleDocSelect(key, e.target.files?.[0])
+          e.target.value = '' // reset so selecting the same file again still fires onChange
+        }}
+      />
     </div>
   )
 }
