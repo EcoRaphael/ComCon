@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/AuthContext'
 import { useToast } from '@/lib/ToastContext'
 import { MapPin, Star, Clock, X, Ban, Flag, AlertTriangle } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
+import RideMap from '@/components/ui/RideMap'
 
 const STATUS_COLORS = {
   pending:   'badge-amber',
@@ -197,6 +198,11 @@ export default function MyRides() {
                   </div>
                   <p className="text-lg font-black text-navy">₱{Number(b.fare || 0).toFixed(2)}</p>
                 </div>
+              )}
+
+              {/* Pickup → dropoff preview map — only for active rides */}
+              {['pending', 'ongoing'].includes(b.status) && (
+                <RideMap pickup={b.pickup} dropoff={b.dropoff} height={130} />
               )}
 
               {/* Meta */}

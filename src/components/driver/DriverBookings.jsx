@@ -5,6 +5,7 @@ import { useToast } from '@/lib/ToastContext'
 import { supabase } from '@/lib/supabase/client'
 import { MapPin, User, Check, X, Play, Flag, Clock, ChevronDown } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
+import RideMap from '@/components/ui/RideMap'
 
 const STATUS_STYLE = {
   pending:   { bg: 'bg-amber-50',  text: 'text-amber-700',  dot: 'bg-amber-400 animate-pulse', label: 'Pending'    },
@@ -193,6 +194,11 @@ export default function DriverBookings() {
                       {b.vehicle_type}
                     </span>
                   </div>
+
+                  {/* Pickup → dropoff preview map — only for active jobs */}
+                  {['pending', 'ongoing'].includes(b.status) && (
+                    <RideMap pickup={b.pickup} dropoff={b.dropoff} height={130} />
+                  )}
 
                   {/* Action buttons */}
                   {b.status === 'pending' && (
