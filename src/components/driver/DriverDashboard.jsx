@@ -79,8 +79,13 @@ export default function DriverDashboard() {
 
   async function toggleStatus() {
     if (!driver) return
+    const goingOnline = driver.status !== 'active'
+    if (goingOnline && !driver.verified) {
+      toast('Your account must be verified by admin before you can go online.', 'error')
+      return
+    }
     setToggling(true)
-    const newStatus = driver.status === 'active' ? 'inactive' : 'active'
+    const newStatus = goingOnline ? 'active' : 'inactive'
     const { error } = await supabase.from('drivers').update({ status: newStatus }).eq('id', driver.id)
     if (!error) {
       setDriver(prev => ({ ...prev, status: newStatus }))
@@ -125,8 +130,9 @@ export default function DriverDashboard() {
         {/* Online/Offline toggle */}
         <button
           onClick={toggleStatus}
-          disabled={toggling}
+          disabled={toggling || (!isOnline && !driver?.verified)}
           className={`w-full py-4 rounded-2xl font-black text-base flex items-center justify-center gap-3 shadow-lg active:scale-95 transition-all ${
+            (!isOnline && !driver?.verified) ? 'bg-white/10 text-white/50 cursor-not-allowed' :
             isOnline
               ? 'bg-white/10 text-white border-2 border-white/30 hover:bg-white/20'
               : 'bg-white text-green hover:bg-green-light'
@@ -135,7 +141,9 @@ export default function DriverDashboard() {
             ? <Spinner size={22} />
             : <>
                 <Power size={22} strokeWidth={2.5} />
-                {isOnline ? 'Go Offline' : 'Go Online — Start Accepting Rides'}
+                {isOnline
+                  ? 'Go Offline'
+                  : (!driver?.verified ? 'Verification Required' : 'Go Online — Start Accepting Rides')}
               </>
           }
         </button>
@@ -193,7 +201,7 @@ export default function DriverDashboard() {
             <span className="text-2xl flex-shrink-0">⚠️</span>
             <div>
               <p className="text-sm font-bold text-amber-800">Account Pending Verification</p>
-              <p className="text-xs text-amber-700 mt-1">Your account is waiting for admin approval. You can still receive bookings once verified.</p>
+              <p className="text-xs text-amber-700 mt-1">Your account is waiting for admin approval. You won't be able to go online or receive bookings until you're verified.</p>
             </div>
           </div>
         )}
