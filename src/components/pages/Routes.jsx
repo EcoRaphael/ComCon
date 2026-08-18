@@ -46,7 +46,8 @@ export default function RoutesPage() {
       supabase.from('fare_matrix').select('*'),
       supabase.from('drivers')
         .select('id, name, plate, vehicle_type, route, rating, color, status, verified')
-        .eq('status', 'active'),
+        .eq('status', 'active')
+        .eq('verified', true),
     ])
     setRoutes(routesRes.data || [])
     setFareMatrix(fareRes.data || [])
