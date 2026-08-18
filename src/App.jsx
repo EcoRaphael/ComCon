@@ -13,12 +13,14 @@ import DriverLayout   from '@/components/driver/DriverLayout'
 import Home       from '@/components/pages/Home'
 import RoutesPage from '@/components/pages/Routes'
 import MyRides    from '@/components/pages/MyRides'
+import CityMap    from '@/components/pages/CityMap'
 import Profile    from '@/components/pages/Profile'
 
 // Driver pages
 import DriverDashboard from '@/components/driver/DriverDashboard'
 import DriverBookings  from '@/components/driver/DriverBookings'
 import DriverSchedule  from '@/components/driver/DriverSchedule'
+import DriverMap       from '@/components/driver/DriverMap'
 import DriverProfile   from '@/components/driver/DriverProfile'
 
 // Role-based redirect after login
@@ -59,12 +61,14 @@ export default function App() {
           <Route path="/"           element={<CommuterPage><Home /></CommuterPage>} />
           <Route path="/routes"     element={<CommuterPage><RoutesPage /></CommuterPage>} />
           <Route path="/my-rides"   element={<CommuterPage><MyRides /></CommuterPage>} />
+          <Route path="/map"        element={<CommuterPage><CityMap /></CommuterPage>} />
           <Route path="/profile"    element={<CommuterPage><Profile /></CommuterPage>} />
 
           {/* Driver routes */}
           <Route path="/driver"          element={<DriverPage><DriverDashboard /></DriverPage>} />
           <Route path="/driver/bookings" element={<DriverPage><DriverBookings /></DriverPage>} />
           <Route path="/driver/schedule" element={<DriverPage><DriverSchedule /></DriverPage>} />
+          <Route path="/driver/map"      element={<DriverPage><DriverMap /></DriverPage>} />
           <Route path="/driver/profile"  element={<DriverPage><DriverProfile /></DriverPage>} />
 
           {/* Fallback — redirect based on role */}

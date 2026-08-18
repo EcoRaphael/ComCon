@@ -1,11 +1,12 @@
 // src/components/driver/DriverLayout.jsx
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Ticket, Calendar, User } from 'lucide-react'
+import { LayoutDashboard, Ticket, Calendar, User, Map } from 'lucide-react'
 import NotificationBell from '@/components/ui/NotificationBell'
 
 const NAV = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/driver'          },
   { icon: Ticket,          label: 'Bookings',  path: '/driver/bookings' },
+  { icon: Map,             label: 'Map',       path: '/driver/map'      },
   { icon: Calendar,        label: 'Schedule',  path: '/driver/schedule' },
   { icon: User,            label: 'Profile',   path: '/driver/profile'  },
 ]

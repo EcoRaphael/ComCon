@@ -1,13 +1,14 @@
 // src/components/ui/RideMap.jsx
-// Static pickup → dropoff map for a single ride. Not live-tracking —
-// this shows fixed pins for the two landmarks, connected by a line.
-// Looks up coordinates from landmarks.js by name, so it works with
-// whatever pickup/dropoff strings a booking already has.
+// Interactive pickup → dropoff map for a single ride. Drag/zoom/pinch are
+// enabled (this is the "whole map" people can explore, not just a fixed
+// snapshot); mouse-wheel zoom stays off so it doesn't hijack page scroll
+// when embedded inside a scrollable card list.
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet'
 import L from 'leaflet'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import 'leaflet/dist/leaflet.css'
 import { LANDMARKS } from '@/lib/landmarks'
+import { Locate } from 'lucide-react'
 
 const CALBAYOG_CENTER = [12.0674, 124.5946]
 
@@ -26,17 +27,42 @@ const findCoords = (name) => {
 }
 
 // Fits the map view to whatever pins actually resolved, so pickup+dropoff
-// are both visible regardless of how far apart they are.
+// are both visible regardless of how far apart they are. Only runs once
+// on mount (via the ref guard) so it doesn't fight the user's own
+// panning/zooming afterward.
 function FitBounds({ points }) {
   const map = useMap()
+  const didFit = useRef(false)
   useEffect(() => {
+    if (didFit.current) return
     if (points.length === 2) {
       map.fitBounds(points, { padding: [32, 32], maxZoom: 15 })
+      didFit.current = true
     } else if (points.length === 1) {
       map.setView(points[0], 14)
+      didFit.current = true
     }
   }, [points, map])
   return null
+}
+
+function RecenterButton({ points }) {
+  const map = useMap()
+  if (points.length === 0) return null
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation()
+        if (points.length === 2) map.fitBounds(points, { padding: [32, 32], maxZoom: 15 })
+        else map.setView(points[0], 14)
+      }}
+      className="absolute bottom-2 right-2 z-[400] w-8 h-8 bg-white rounded-full shadow-md border border-border flex items-center justify-center active:scale-95"
+      aria-label="Recenter on route"
+    >
+      <Locate size={15} className="text-navy" />
+    </button>
+  )
 }
 
 export default function RideMap({ pickup, dropoff, height = 160, className = '' }) {
@@ -52,20 +78,24 @@ export default function RideMap({ pickup, dropoff, height = 160, className = '' 
     <div
       className={`relative rounded-xl overflow-hidden border border-border z-0 ${className}`}
       style={{ height }}
+      onClick={(e) => e.stopPropagation()}
     >
       <MapContainer
         center={points[0] || CALBAYOG_CENTER}
         zoom={14}
         style={{ height: '100%', width: '100%' }}
-        zoomControl={false}
-        dragging={false}
+        zoomControl={true}
+        dragging={true}
         scrollWheelZoom={false}
-        doubleClickZoom={false}
-        touchZoom={false}
-        attributionControl={false}
+        doubleClickZoom={true}
+        touchZoom={true}
       >
-        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
         <FitBounds points={points} />
+        <RecenterButton points={points} />
 
         {points.length === 2 && (
           <Polyline positions={points} pathOptions={{ color: '#2E7D32', weight: 3, dashArray: '6 6' }} />

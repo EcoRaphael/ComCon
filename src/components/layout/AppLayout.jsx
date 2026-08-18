@@ -1,12 +1,13 @@
 // src/components/layout/AppLayout.jsx
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
-import { Home, Search, Clock, User, Navigation, ChevronRight } from 'lucide-react'
+import { Home, Search, Clock, User, Navigation, ChevronRight, Map } from 'lucide-react'
 import NotificationBell from '@/components/ui/NotificationBell'
 
 const NAV = [
   { icon: Home,   label: 'Home',     path: '/'          },
   { icon: Search, label: 'Routes',   path: '/routes'    },
   { icon: Clock,  label: 'My Rides', path: '/my-rides'  },
+  { icon: Map,    label: 'Map',      path: '/map'       },
   { icon: User,   label: 'Profile',  path: '/profile'   },
 ]
 
