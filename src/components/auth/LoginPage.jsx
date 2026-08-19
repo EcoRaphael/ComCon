@@ -366,7 +366,7 @@ function DriverPanel({ onBack, onSwitch }) {
   const [lf, setLf] = useState({ email: '', password: '' })
   const [rf, setRf] = useState({
     name: '', email: '', phone: '', address: '',
-    plate: '', vehicleType: '', licenseNo: '', route: '',
+    vehicleType: '', route: '',
     password: '', confirm: ''
   })
 
@@ -470,8 +470,8 @@ function DriverPanel({ onBack, onSwitch }) {
 
   const handleRegister = async (e) => {
     e.preventDefault(); setError('')
-    if (!rf.name || !rf.email || !rf.password || !rf.plate || !rf.vehicleType)
-      return setError('Name, email, password, plate and vehicle type are required.')
+    if (!rf.name || !rf.email || !rf.password || !rf.vehicleType)
+      return setError('Name, email, password, and vehicle type are required.')
     if (rf.password.length < 8) return setError('Password must be at least 8 characters.')
     if (rf.password !== rf.confirm) return setError('Passwords do not match.')
     if (!docs.license || !docs.or || !docs.cr)
@@ -495,12 +495,21 @@ function DriverPanel({ onBack, onSwitch }) {
       })
       if (userErr) throw userErr
 
+      // plate is NOT NULL + UNIQUE in the schema, but we no longer collect
+      // it here — admin reads the real plate off the License/OR/CR photos
+      // and sets it when reviewing the application (see Drivers.jsx). This
+      // placeholder is unique (derived from the new user's own UUID) so it
+      // satisfies the constraint without colliding with anyone else, and
+      // is clearly recognizable as "not a real plate yet" wherever it's
+      // displayed until admin fills in the actual one.
+      const placeholderPlate = `PENDING-${userId.slice(0, 8).toUpperCase()}`
+
       const { error: driverErr } = await supabase.from('drivers').insert({
         user_id: userId, name: rf.name.trim(),
-        plate: rf.plate.trim().toUpperCase(),
+        plate: placeholderPlate,
         vehicle_type: rf.vehicleType,
         route: rf.route?.trim() || '',
-        license_no: rf.licenseNo?.trim() || '',
+        license_no: '',
         status: 'inactive', verified: false,
         rating: 0, trips: 0, earnings: 0,
         color: '#E84C27',
@@ -548,7 +557,7 @@ function DriverPanel({ onBack, onSwitch }) {
       <div className="w-full max-w-sm bg-white rounded-3xl p-8 shadow-2xl text-center">
         <CheckCircle2 size={52} className="text-cta mx-auto mb-4" />
         <h2 className="text-xl font-black text-navy mb-2">Application Submitted!</h2>
-        <p className="text-sub text-sm leading-relaxed">Your driver registration is pending review by <span className="font-bold text-navy">LTO Calbayog admin</span>. You'll be notified once verified.</p>
+        <p className="text-sub text-sm leading-relaxed">Your driver registration is pending review by <span className="font-bold text-navy">LTO Calbayog admin</span>, who will confirm your plate and license number from your uploaded documents. You'll be notified once verified.</p>
         <button onClick={() => { setDone(false); setTab('login'); setLf(p => ({ ...p, email: rf.email })) }}
           className="mt-6 w-full py-3 text-white font-black text-sm uppercase tracking-widest rounded-2xl bg-cta">
           Back to Sign In
@@ -646,32 +655,21 @@ function DriverPanel({ onBack, onSwitch }) {
             </div>
 
             <p className="text-[10px] font-black uppercase tracking-widest text-cta border-b border-orange-100 pb-1 pt-1">Vehicle Info</p>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className={labelCls}>Plate No. *</label>
-                <input className={inputCls} placeholder="ABC 123"
-                  value={rf.plate} onChange={e => setRf(p => ({ ...p, plate: e.target.value }))} disabled={loading} />
-              </div>
-              <div>
-                <label className={labelCls}>Vehicle Type *</label>
-                <select className={inputCls + " cursor-pointer"}
-                  value={rf.vehicleType} onChange={e => setRf(p => ({ ...p, vehicleType: e.target.value }))} disabled={loading}>
-                  <option value="">Select...</option>
-                  {VEHICLE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </div>
+            <p className="text-[11px] text-sub -mt-1">
+              Plate and license numbers aren't needed here — admin reads them off your License/OR/CR photos below when reviewing your application.
+            </p>
+            <div>
+              <label className={labelCls}>Vehicle Type *</label>
+              <select className={inputCls + " cursor-pointer"}
+                value={rf.vehicleType} onChange={e => setRf(p => ({ ...p, vehicleType: e.target.value }))} disabled={loading}>
+                <option value="">Select...</option>
+                {VEHICLE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className={labelCls}>License No.</label>
-                <input className={inputCls} placeholder="N01-23-456789"
-                  value={rf.licenseNo} onChange={e => setRf(p => ({ ...p, licenseNo: e.target.value }))} disabled={loading} />
-              </div>
-              <div>
-                <label className={labelCls}>Route</label>
-                <input className={inputCls} placeholder="Rawis–Maybog"
-                  value={rf.route} onChange={e => setRf(p => ({ ...p, route: e.target.value }))} disabled={loading} />
-              </div>
+            <div>
+              <label className={labelCls}>Route</label>
+              <input className={inputCls} placeholder="Rawis–Maybog"
+                value={rf.route} onChange={e => setRf(p => ({ ...p, route: e.target.value }))} disabled={loading} />
             </div>
 
             <p className="text-[10px] font-black uppercase tracking-widest text-cta border-b border-orange-100 pb-1 pt-1">Verification Documents</p>
