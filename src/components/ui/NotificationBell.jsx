@@ -72,14 +72,23 @@ export default function NotificationBell({ bottomOffset = 96 }) {
 
   async function markAsRead(id) {
     setItems(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n))
-    await supabase.from('notifications').update({ is_read: true }).eq('id', id)
+    const { error } = await supabase.from('notifications').update({ is_read: true }).eq('id', id)
+    if (error) {
+      console.error('[NotificationBell] markAsRead failed:', error)
+      // Roll back the optimistic update so the UI matches reality
+      setItems(prev => prev.map(n => n.id === id ? { ...n, is_read: false } : n))
+    }
   }
 
   async function markAllRead() {
     const unreadIds = items.filter(n => !n.is_read).map(n => n.id)
     if (unreadIds.length === 0) return
     setItems(prev => prev.map(n => ({ ...n, is_read: true })))
-    await supabase.from('notifications').update({ is_read: true }).in('id', unreadIds)
+    const { error } = await supabase.from('notifications').update({ is_read: true }).in('id', unreadIds)
+    if (error) {
+      console.error('[NotificationBell] markAllRead failed:', error)
+      setItems(prev => prev.map(n => unreadIds.includes(n.id) ? { ...n, is_read: false } : n))
+    }
   }
 
   if (!profile?.id) return null

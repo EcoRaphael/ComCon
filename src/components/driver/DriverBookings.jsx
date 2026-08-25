@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase/client'
 import { MapPin, User, Check, X, Play, Flag, Clock, ChevronDown } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
 import RideMap from '@/components/ui/RideMap'
+import UserAvatar from '@/components/ui/UserAvatar'
 
 const STATUS_STYLE = {
   pending:   { bg: 'bg-amber-50',  text: 'text-amber-700',  dot: 'bg-amber-400 animate-pulse', label: 'Pending'    },
@@ -183,9 +184,7 @@ export default function DriverBookings() {
 
                   {/* Commuter */}
                   <div className="flex items-center gap-2.5 bg-surface rounded-xl p-2.5">
-                    <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-                      <User size={15} className="text-blue-600" />
-                    </div>
+                    <UserAvatar userId={b.customer_id} name={b.users?.name} color="#3b82f6" size={32} />
                     <div className="flex-1">
                       <p className="text-xs font-bold text-navy">{b.users?.name || 'Commuter'}</p>
                       <p className="text-[10px] text-sub">{b.users?.phone || 'No phone'}</p>
