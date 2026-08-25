@@ -1,13 +1,18 @@
 // src/lib/ToastContext.jsx
-import { createContext, useContext, useState, useCallback } from 'react'
+import { createContext, useContext, useState, useCallback, useRef } from 'react'
 
 const ToastCtx = createContext(null)
 
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([])
+  // A counter, not Date.now() — two toasts fired in the same millisecond
+  // (e.g. from a quick batch action) would otherwise get the same id,
+  // causing a duplicate React key and the removal timer clearing the
+  // wrong toast.
+  const counter = useRef(0)
 
   const toast = useCallback((msg, type = 'info') => {
-    const id = Date.now()
+    const id = ++counter.current
     setToasts(p => [...p, { id, msg, type }])
     setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 3500)
   }, [])

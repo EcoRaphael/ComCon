@@ -5,6 +5,7 @@ import { useToast } from '@/lib/ToastContext'
 import { supabase } from '@/lib/supabase/client'
 import { User, Mail, Phone, Lock, Save, Edit3, LogOut, RefreshCw, AlertTriangle, ShieldCheck } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
+import AvatarPicker from '@/components/ui/AvatarPicker'
 
 export default function DriverProfile() {
   const { profile, setProfile, signOut } = useAuth()
@@ -60,9 +61,7 @@ export default function DriverProfile() {
 
       {/* Hero */}
       <div className="bg-gradient-to-br from-green-dark to-green rounded-2xl p-5 flex items-center gap-4">
-        <div className="w-16 h-16 rounded-full bg-white/20 border-2 border-white/30 flex items-center justify-center text-white font-black text-xl flex-shrink-0">
-          {initials}
-        </div>
+        <AvatarPicker profile={profile} size={64} initials={initials} />
         <div>
           <p className="text-white font-black text-lg">{profile?.name}</p>
           <p className="text-white/60 text-sm">{profile?.email}</p>

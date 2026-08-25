@@ -6,6 +6,7 @@ import { useToast } from '@/lib/ToastContext'
 import { MapPin, Star, Clock, X, Ban, Flag, AlertTriangle } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
 import RideMap from '@/components/ui/RideMap'
+import UserAvatar from '@/components/ui/UserAvatar'
 
 const STATUS_COLORS = {
   pending:   'badge-amber',
@@ -71,7 +72,7 @@ export default function MyRides() {
     setLoading(true)
     const { data } = await supabase
       .from('bookings')
-      .select('*, drivers!driver_id(id, name, plate, vehicle_type, rating, color)')
+      .select('*, drivers!driver_id(id, name, plate, vehicle_type, rating, color, user_id)')
       .eq('customer_id', profile.id)
       .order('created_at', { ascending: false })
     setBookings(data || [])
@@ -188,10 +189,7 @@ export default function MyRides() {
               {/* Driver */}
               {b.drivers && (
                 <div className="flex items-center gap-3 bg-surface rounded-xl p-3">
-                  <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-black flex-shrink-0"
-                    style={{ background: b.drivers.color || '#2E7D32' }}>
-                    {b.drivers.name?.split(' ').map(w=>w[0]).join('').slice(0,2)}
-                  </div>
+                  <UserAvatar userId={b.drivers.user_id} name={b.drivers.name} color={b.drivers.color} size={36} />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-bold text-navy truncate">{b.drivers.name}</p>
                     <p className="text-xs text-sub">{b.drivers.vehicle_type} · {b.drivers.plate}</p>
@@ -270,10 +268,7 @@ export default function MyRides() {
             </div>
             {ratingTarget.drivers && (
               <div className="flex items-center gap-3 bg-surface rounded-2xl p-4 mb-5">
-                <div className="w-12 h-12 rounded-full flex items-center justify-center text-white font-black"
-                  style={{ background: ratingTarget.drivers.color || '#2E7D32' }}>
-                  {ratingTarget.drivers.name?.split(' ').map(w=>w[0]).join('').slice(0,2)}
-                </div>
+                <UserAvatar userId={ratingTarget.drivers.user_id} name={ratingTarget.drivers.name} color={ratingTarget.drivers.color} size={48} />
                 <div>
                   <p className="font-bold text-navy">{ratingTarget.drivers.name}</p>
                   <p className="text-xs text-sub">{ratingTarget.drivers.vehicle_type} · {ratingTarget.drivers.plate}</p>
@@ -313,10 +308,7 @@ export default function MyRides() {
             </div>
             {reportTarget.drivers && (
               <div className="flex items-center gap-3 bg-surface rounded-2xl p-3 mb-4">
-                <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-black text-sm"
-                  style={{ background: reportTarget.drivers.color || '#2E7D32' }}>
-                  {reportTarget.drivers.name?.split(' ').map(w=>w[0]).join('').slice(0,2)}
-                </div>
+                <UserAvatar userId={reportTarget.drivers.user_id} name={reportTarget.drivers.name} color={reportTarget.drivers.color} size={40} />
                 <div>
                   <p className="font-bold text-navy text-sm">{reportTarget.drivers.name}</p>
                   <p className="text-xs text-sub">{reportTarget.pickup} → {reportTarget.dropoff}</p>

@@ -7,6 +7,7 @@ import { useToast } from '@/lib/ToastContext'
 import { Search, MapPin, ArrowRight, Car, Bus, ChevronRight, X, User, CreditCard } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
 import LocationPicker from '@/components/ui/LocationPicker'
+import UserAvatar from '@/components/ui/UserAvatar'
 
 const VEHICLE_ICONS = { Tricycle: Car, Timbol: Bus, Multicab: Bus }
 const METHODS = [
@@ -45,7 +46,7 @@ export default function RoutesPage() {
       supabase.from('routes').select('*').eq('status', 'active').order('name'),
       supabase.from('fare_matrix').select('*'),
       supabase.from('drivers')
-        .select('id, name, plate, vehicle_type, route, rating, color, status, verified')
+        .select('id, name, plate, vehicle_type, route, rating, color, status, verified, user_id')
         .eq('status', 'active')
         .eq('verified', true),
     ])
@@ -317,10 +318,7 @@ export default function RoutesPage() {
                       onClick={() => { setDriver(d); setStep('confirm') }}
                       className={`w-full flex items-center gap-3 p-4 rounded-2xl border-2 transition-all text-left
                         ${driver?.id === d.id ? 'border-green bg-green-light' : 'border-border hover:border-green/40'}`}>
-                      <div className="w-11 h-11 rounded-full flex items-center justify-center text-white font-black text-sm"
-                        style={{ background: d.color || '#2E7D32' }}>
-                        {d.name?.split(' ').map(w => w[0]).join('').slice(0, 2)}
-                      </div>
+                      <UserAvatar userId={d.user_id} name={d.name} color={d.color} size={44} />
                       <div className="flex-1 min-w-0">
                         <p className="font-bold text-navy text-sm">{d.name}</p>
                         <p className="text-xs text-sub">{d.vehicle_type} · {d.plate}</p>
@@ -373,10 +371,7 @@ export default function RoutesPage() {
                   onClick={() => setShowDriverProfile(true)}
                   className="w-full bg-surface rounded-2xl p-4 flex items-center gap-3 text-left hover:bg-border/40 transition-colors active:scale-[0.99]"
                 >
-                  <div className="w-12 h-12 rounded-full flex items-center justify-center text-white font-black flex-shrink-0"
-                    style={{ background: driver.color || '#2E7D32' }}>
-                    {driver.name?.split(' ').map(w => w[0]).join('').slice(0, 2)}
-                  </div>
+                  <UserAvatar userId={driver.user_id} name={driver.name} color={driver.color} size={48} />
                   <div className="flex-1 min-w-0">
                     <p className="font-bold text-navy">{driver.name}</p>
                     <p className="text-xs text-sub">{driver.plate} · ★ {Number(driver.rating || 0).toFixed(1)}</p>
@@ -450,12 +445,7 @@ export default function RoutesPage() {
             </button>
 
             <div className="flex flex-col items-center text-center pt-2">
-              <div
-                className="w-20 h-20 rounded-full flex items-center justify-center text-white font-black text-2xl mb-3"
-                style={{ background: driver.color || '#2E7D32' }}
-              >
-                {driver.name?.split(' ').map(w => w[0]).join('').slice(0, 2)}
-              </div>
+              <UserAvatar userId={driver.user_id} name={driver.name} color={driver.color} size={80} className="mb-3" />
               <h3 className="text-xl font-black text-navy">{driver.name}</h3>
               {driver.verified && (
                 <span className="inline-flex items-center gap-1 text-[11px] font-bold text-green bg-green-light px-2.5 py-0.5 rounded-full mt-1.5">
