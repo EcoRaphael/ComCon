@@ -259,7 +259,7 @@ function CommuterPanel({ onBack, onSwitch }) {
   // on success, not back in handleRegister.
   const handleVerifyOtp = async (e) => {
     e.preventDefault(); setError('')
-    if (otp.trim().length !== 6) { setError('Enter the 6-digit code from your email.'); return }
+    if (otp.trim().length < 6) { setError('Enter the verification code from your email.'); return }
     setLoading(true)
     try {
       await verifySignUpOtp(rf, otp.trim())
@@ -286,24 +286,24 @@ function CommuterPanel({ onBack, onSwitch }) {
           <Mail size={44} className="text-blue-500 mx-auto mb-3" />
           <h2 className="text-xl font-black text-navy mb-1">Check Your Email</h2>
           <p className="text-sub text-sm">
-            We sent a 6-digit code to <span className="font-bold text-navy">{rf.email}</span>
+            We sent a verification code to <span className="font-bold text-navy">{rf.email}</span>
           </p>
         </div>
         <form onSubmit={handleVerifyOtp} className="space-y-3">
           <input
             type="text"
             inputMode="numeric"
-            maxLength={6}
-            placeholder="000000"
+            maxLength={10}
+            placeholder="00000000"
             value={otp}
             onChange={e => setOtp(e.target.value.replace(/\D/g, ''))}
             disabled={loading}
-            className="w-full text-center text-2xl font-black tracking-[0.5em] py-3 border-2 border-border rounded-2xl focus:border-blue-400 outline-none"
+            className="w-full text-center text-2xl font-black tracking-[0.3em] py-3 border-2 border-border rounded-2xl focus:border-blue-400 outline-none"
           />
           {error && <p className="text-red-600 text-xs text-center">{error}</p>}
           <button
             type="submit"
-            disabled={loading || otp.length !== 6}
+            disabled={loading || otp.length < 6}
             className="w-full py-3 text-white font-black text-sm uppercase tracking-widest rounded-2xl disabled:opacity-50"
             style={{ background: 'linear-gradient(135deg, #1565C0, #1976D2)' }}
           >
