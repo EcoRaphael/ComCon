@@ -1,9 +1,9 @@
 // src/components/auth/LoginPage.jsx
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate, Navigate } from 'react-router-dom'
 import { useAuth } from '@/lib/AuthContext'
 import { useToast } from '@/lib/ToastContext'
-import { Eye, EyeOff, UserCircle2, Bike, ArrowLeft, CheckCircle2, Camera, Image, X } from 'lucide-react'
+import { Eye, EyeOff, UserCircle2, Bike, ArrowLeft, CheckCircle2, Camera, Image, X, Mail } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
 import CameraCapture from '@/components/ui/CameraCapture'
 import { supabase } from '@/lib/supabase/client'
@@ -162,7 +162,7 @@ function Field({ label, type = 'text', placeholder, value, onChange, disabled, a
 
 // ── Commuter Auth Panel ─────────────────────────────────────────
 function CommuterPanel({ onBack, onSwitch }) {
-  const { signIn, signUp } = useAuth()
+  const { signIn, startSignUp, verifySignUpOtp, resendSignUpOtp } = useAuth()
   const { toast } = useToast()
   const navigate  = useNavigate()
 
@@ -170,6 +170,12 @@ function CommuterPanel({ onBack, onSwitch }) {
   const [loading,    setLoading]    = useState(false)
   const [error,      setError]      = useState('')
   const [done,       setDone]       = useState(false)
+  // 'form' -> collecting registration details, 'otp' -> awaiting the
+  // 6-digit code just emailed to them
+  const [step,        setStep]        = useState('form')
+  const [otp,         setOtp]         = useState('')
+  const [resending,   setResending]   = useState(false)
+  const [resendCooldown, setResendCooldown] = useState(0)
   const [wrongRole,  setWrongRole]  = useState(() => {
     const v = sessionStorage.getItem('cc-wrong-role-commuter')
     if (v) { sessionStorage.removeItem('cc-wrong-role-commuter'); return v }
@@ -185,6 +191,13 @@ function CommuterPanel({ onBack, onSwitch }) {
   const [rf, setRf] = useState({ name: '', email: '', phone: '', address: '', password: '', confirm: '' })
 
   const accent = 'focus:border-blue-400'
+
+  // Countdown for the resend-code button, so people can't hammer it
+  useEffect(() => {
+    if (resendCooldown <= 0) return
+    const t = setTimeout(() => setResendCooldown(s => s - 1), 1000)
+    return () => clearTimeout(t)
+  }, [resendCooldown])
 
   if (wrongRole) return (
     <WrongPortalScreen
@@ -226,6 +239,8 @@ function CommuterPanel({ onBack, onSwitch }) {
     finally { setLoading(false) }
   }
 
+  // Step 1 of registration: create the (unconfirmed) account, which
+  // triggers Supabase to email a 6-digit code, then move to the OTP step.
   const handleRegister = async (e) => {
     e.preventDefault(); setError('')
     if (!rf.name || !rf.email || !rf.password) { setError('Name, email and password are required.'); return }
@@ -233,22 +248,95 @@ function CommuterPanel({ onBack, onSwitch }) {
     if (rf.password !== rf.confirm) { setError('Passwords do not match.'); return }
     setLoading(true)
     try {
-      await signUp(rf)
+      await startSignUp(rf)
+      setStep('otp')
+      setResendCooldown(30)
+    } catch (err) { setError(err.message) }
+    finally { setLoading(false) }
+  }
+
+  // Step 2: verify the code — the profile row only gets created here,
+  // on success, not back in handleRegister.
+  const handleVerifyOtp = async (e) => {
+    e.preventDefault(); setError('')
+    if (otp.trim().length !== 6) { setError('Enter the 6-digit code from your email.'); return }
+    setLoading(true)
+    try {
+      await verifySignUpOtp(rf, otp.trim())
       setDone(true)
     } catch (err) { setError(err.message) }
     finally { setLoading(false) }
   }
 
+  const handleResendOtp = async () => {
+    if (resendCooldown > 0) return
+    setResending(true); setError('')
+    try {
+      await resendSignUpOtp(rf.email)
+      toast('A new code has been sent to your email.')
+      setResendCooldown(30)
+    } catch (err) { setError(err.message) }
+    finally { setResending(false) }
+  }
+
+  if (step === 'otp' && !done) return (
+    <div className="min-h-screen bg-gradient-to-br from-green-dark via-green to-green flex flex-col items-center justify-center p-5">
+      <div className="w-full max-w-sm bg-white rounded-3xl p-8 shadow-2xl">
+        <div className="text-center mb-5">
+          <Mail size={44} className="text-blue-500 mx-auto mb-3" />
+          <h2 className="text-xl font-black text-navy mb-1">Check Your Email</h2>
+          <p className="text-sub text-sm">
+            We sent a 6-digit code to <span className="font-bold text-navy">{rf.email}</span>
+          </p>
+        </div>
+        <form onSubmit={handleVerifyOtp} className="space-y-3">
+          <input
+            type="text"
+            inputMode="numeric"
+            maxLength={6}
+            placeholder="000000"
+            value={otp}
+            onChange={e => setOtp(e.target.value.replace(/\D/g, ''))}
+            disabled={loading}
+            className="w-full text-center text-2xl font-black tracking-[0.5em] py-3 border-2 border-border rounded-2xl focus:border-blue-400 outline-none"
+          />
+          {error && <p className="text-red-600 text-xs text-center">{error}</p>}
+          <button
+            type="submit"
+            disabled={loading || otp.length !== 6}
+            className="w-full py-3 text-white font-black text-sm uppercase tracking-widest rounded-2xl disabled:opacity-50"
+            style={{ background: 'linear-gradient(135deg, #1565C0, #1976D2)' }}
+          >
+            {loading ? 'Verifying...' : 'Verify & Create Account'}
+          </button>
+        </form>
+        <div className="text-center mt-4 space-y-2">
+          <button
+            onClick={handleResendOtp}
+            disabled={resending || resendCooldown > 0}
+            className="text-xs font-bold text-blue-600 disabled:text-sub disabled:cursor-not-allowed"
+          >
+            {resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : resending ? 'Sending...' : 'Resend code'}
+          </button>
+          <br />
+          <button onClick={() => { setStep('form'); setOtp(''); setError('') }} className="text-xs text-sub">
+            Wrong email? Go back
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+
   if (done) return (
     <div className="min-h-screen bg-gradient-to-br from-green-dark via-green to-green flex flex-col items-center justify-center p-5">
       <div className="w-full max-w-sm bg-white rounded-3xl p-8 shadow-2xl text-center">
         <CheckCircle2 size={52} className="text-blue-500 mx-auto mb-4" />
-        <h2 className="text-xl font-black text-navy mb-2">Account Created!</h2>
-        <p className="text-sub text-sm">Check your email <span className="font-bold text-navy">{rf.email}</span> to verify your account, then sign in.</p>
-        <button onClick={() => { setDone(false); setTab('login'); setLf(p => ({ ...p, email: rf.email })) }}
+        <h2 className="text-xl font-black text-navy mb-2">Email Verified!</h2>
+        <p className="text-sub text-sm">Your account is ready, <span className="font-bold text-navy">{rf.name}</span>.</p>
+        <button onClick={() => navigate('/', { replace: true })}
           className="mt-6 w-full py-3 text-white font-black text-sm uppercase tracking-widest rounded-2xl"
           style={{ background: 'linear-gradient(135deg, #1565C0, #1976D2)' }}>
-          Go to Sign In
+          Continue
         </button>
       </div>
     </div>
