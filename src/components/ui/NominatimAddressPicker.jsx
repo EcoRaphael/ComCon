@@ -2,16 +2,13 @@
 // Live address search using Nominatim — OpenStreetMap's free geocoding
 // API. No API key, no billing account, no Google Cloud setup: this pairs
 // naturally with the rest of the app, since RideMap.jsx and
-// CityMapView.jsx already render OSM tiles via Leaflet. Returns the same
-// { address, lat, lng } shape GoogleAddressPicker did, so it's a drop-in
-// swap — no changes needed to how the registration forms consume it.
+// CityMapView.jsx already render OSM tiles via Leaflet. Returns
+// { address, lat, lng }.
 //
-// The dropdown is portaled into document.body with its position computed
-// from the trigger's bounding rect — same fix as AddressPicker.jsx and
-// the admin panel's Modal component elsewhere in this project. The
-// driver registration form lives inside a scrollable container
-// (max-h-[65vh] overflow-y-auto), and a normally-nested absolute dropdown
-// would get clipped by that boundary once results extend below the fold.
+// This is a normal, nested dropdown (position: absolute, anchored to its
+// own wrapper) — not a portaled overlay. It scrolls naturally with the
+// registration form's content, same as a plain <select> would, rather
+// than floating independently at fixed viewport coordinates.
 //
 // FAIR USE NOTE: Nominatim's public instance (nominatim.openstreetmap.org)
 // is free but rate-limited and intended for light use — its usage policy
@@ -24,7 +21,6 @@
 // than calling the public instance directly from every user's browser —
 // worth revisiting before any large-scale beneficiary rollout.
 import { useState, useRef, useEffect } from 'react'
-import { createPortal } from 'react-dom'
 import { MapPin, Search, X, Loader2 } from 'lucide-react'
 
 // Calbayog City bounding box — biases results, doesn't hard-restrict.
@@ -35,27 +31,14 @@ export default function NominatimAddressPicker({ value, onChange, placeholder = 
   const [results, setResults] = useState([])
   const [loading, setLoading] = useState(false)
   const [open, setOpen] = useState(false)
-  const [coords, setCoords] = useState(null)
 
-  const triggerRef = useRef(null)
-  const panelRef = useRef(null)
+  const wrapRef = useRef(null)
   const debounceRef = useRef(null)
   const abortRef = useRef(null)
 
   useEffect(() => {
     setQuery(value?.address || '')
   }, [value?.address])
-
-  const positionPanel = () => {
-    const rect = triggerRef.current?.getBoundingClientRect()
-    if (rect) {
-      setCoords({
-        top: rect.bottom + window.scrollY + 6,
-        left: rect.left + window.scrollX,
-        width: rect.width,
-      })
-    }
-  }
 
   const runSearch = (text) => {
     clearTimeout(debounceRef.current)
@@ -87,13 +70,12 @@ export default function NominatimAddressPicker({ value, onChange, placeholder = 
   const handleInputChange = (e) => {
     const text = e.target.value
     setQuery(text)
-    if (!open) { positionPanel(); setOpen(true) }
+    setOpen(true)
     runSearch(text)
   }
 
   const handleFocus = () => {
     if (disabled) return
-    positionPanel()
     setOpen(true)
     if (query.trim()) runSearch(query)
   }
@@ -112,30 +94,21 @@ export default function NominatimAddressPicker({ value, onChange, placeholder = 
   useEffect(() => {
     if (!open) return
     function handleClickOutside(e) {
-      if (
-        triggerRef.current && !triggerRef.current.contains(e.target) &&
-        panelRef.current && !panelRef.current.contains(e.target)
-      ) setOpen(false)
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false)
     }
-    function handleScrollOrResize() { setOpen(false) }
     document.addEventListener('mousedown', handleClickOutside)
-    window.addEventListener('scroll', handleScrollOrResize, true)
-    window.addEventListener('resize', handleScrollOrResize)
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
-      window.removeEventListener('scroll', handleScrollOrResize, true)
-      window.removeEventListener('resize', handleScrollOrResize)
       clearTimeout(debounceRef.current)
       abortRef.current?.abort()
     }
   }, [open])
 
   return (
-    <>
-      <div className="relative mt-1.5">
+    <div className="relative mt-1.5" ref={wrapRef}>
+      <div className="relative">
         <Search size={15} className="absolute left-4 top-1/2 -translate-y-1/2 text-sub pointer-events-none" />
         <input
-          ref={triggerRef}
           value={query}
           onChange={handleInputChange}
           onFocus={handleFocus}
@@ -155,12 +128,8 @@ export default function NominatimAddressPicker({ value, onChange, placeholder = 
         )}
       </div>
 
-      {open && coords && createPortal(
-        <div
-          ref={panelRef}
-          className="fixed z-[80] bg-white rounded-2xl shadow-xl border border-border max-h-72 overflow-y-auto"
-          style={{ top: coords.top, left: coords.left, width: coords.width }}
-        >
+      {open && (
+        <div className="absolute z-30 mt-1.5 w-full bg-white rounded-2xl shadow-xl border border-border max-h-72 overflow-y-auto">
           {results.length === 0 ? (
             <p className="text-xs text-sub text-center py-5 px-3">
               {loading ? 'Searching...' : query.trim() ? 'No matches — try a different search.' : 'Start typing a barangay, street, or landmark...'}
@@ -178,9 +147,8 @@ export default function NominatimAddressPicker({ value, onChange, placeholder = 
               </button>
             ))
           )}
-        </div>,
-        document.body
+        </div>
       )}
-    </>
+    </div>
   )
 }
