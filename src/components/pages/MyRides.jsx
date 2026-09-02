@@ -7,6 +7,7 @@ import { MapPin, Star, Clock, X, Ban, Flag, AlertTriangle } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
 import RideMap from '@/components/ui/RideMap'
 import UserAvatar from '@/components/ui/UserAvatar'
+import PaymentMethodBadges from '@/components/ui/PaymentMethodBadges'
 
 const STATUS_COLORS = {
   pending:   'badge-amber',
@@ -72,7 +73,7 @@ export default function MyRides() {
     setLoading(true)
     const { data } = await supabase
       .from('bookings')
-      .select('*, drivers!driver_id(id, name, plate, vehicle_type, rating, color, user_id)')
+      .select('*, drivers!driver_id(id, name, plate, vehicle_type, rating, color, user_id, payment_methods)')
       .eq('customer_id', profile.id)
       .order('created_at', { ascending: false })
     setBookings(data || [])
@@ -188,13 +189,16 @@ export default function MyRides() {
 
               {/* Driver */}
               {b.drivers && (
-                <div className="flex items-center gap-3 bg-surface rounded-xl p-3">
-                  <UserAvatar userId={b.drivers.user_id} name={b.drivers.name} color={b.drivers.color} size={36} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-navy truncate">{b.drivers.name}</p>
-                    <p className="text-xs text-sub">{b.drivers.vehicle_type} · {b.drivers.plate}</p>
+                <div className="bg-surface rounded-xl p-3 space-y-2">
+                  <div className="flex items-center gap-3">
+                    <UserAvatar userId={b.drivers.user_id} name={b.drivers.name} color={b.drivers.color} size={36} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-navy truncate">{b.drivers.name}</p>
+                      <p className="text-xs text-sub">{b.drivers.vehicle_type} · {b.drivers.plate}</p>
+                    </div>
+                    <p className="text-lg font-black text-navy">₱{Number(b.fare || 0).toFixed(2)}</p>
                   </div>
-                  <p className="text-lg font-black text-navy">₱{Number(b.fare || 0).toFixed(2)}</p>
+                  <PaymentMethodBadges methods={b.drivers.payment_methods} />
                 </div>
               )}
 

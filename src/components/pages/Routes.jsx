@@ -8,6 +8,7 @@ import { Search, MapPin, ArrowRight, Car, Bus, ChevronRight, X, User, CreditCard
 import Spinner from '@/components/ui/Spinner'
 import LocationPicker from '@/components/ui/LocationPicker'
 import UserAvatar from '@/components/ui/UserAvatar'
+import PaymentMethodBadges from '@/components/ui/PaymentMethodBadges'
 
 const VEHICLE_ICONS = { Tricycle: Car, Timbol: Bus, Multicab: Bus }
 const METHODS = [
@@ -46,7 +47,7 @@ export default function RoutesPage() {
       supabase.from('routes').select('*').eq('status', 'active').order('name'),
       supabase.from('fare_matrix').select('*'),
       supabase.from('drivers')
-        .select('id, name, plate, vehicle_type, route, rating, color, status, verified, user_id')
+        .select('id, name, plate, vehicle_type, route, rating, color, status, verified, user_id, payment_methods')
         .eq('status', 'active')
         .eq('verified', true),
     ])
@@ -322,6 +323,7 @@ export default function RoutesPage() {
                       <div className="flex-1 min-w-0">
                         <p className="font-bold text-navy text-sm">{d.name}</p>
                         <p className="text-xs text-sub">{d.vehicle_type} · {d.plate}</p>
+                        <PaymentMethodBadges methods={d.payment_methods} className="mt-1" />
                       </div>
                       <div className="text-right">
                         <p className="text-amber-500 text-sm font-bold">★ {Number(d.rating || 0).toFixed(1)}</p>
@@ -375,6 +377,7 @@ export default function RoutesPage() {
                   <div className="flex-1 min-w-0">
                     <p className="font-bold text-navy">{driver.name}</p>
                     <p className="text-xs text-sub">{driver.plate} · ★ {Number(driver.rating || 0).toFixed(1)}</p>
+                    <PaymentMethodBadges methods={driver.payment_methods} className="mt-1.5" />
                   </div>
                   <ChevronRight size={18} className="text-sub flex-shrink-0" />
                 </button>
@@ -471,6 +474,15 @@ export default function RoutesPage() {
                 <p className="text-[10px] font-bold text-sub uppercase tracking-wider mb-1">Route</p>
                 <p className="font-black text-navy text-sm truncate">{driver.route || 'Anywhere'}</p>
               </div>
+            </div>
+
+            <div className="mt-4">
+              <p className="text-[10px] font-bold text-sub uppercase tracking-wider mb-2">Available Payment Methods</p>
+              {driver.payment_methods?.length > 0 ? (
+                <PaymentMethodBadges methods={driver.payment_methods} size="lg" />
+              ) : (
+                <p className="text-xs text-sub">Not specified — ask the driver directly.</p>
+              )}
             </div>
 
             <button
