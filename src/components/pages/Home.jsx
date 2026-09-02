@@ -10,6 +10,7 @@ import {
 import Spinner from '@/components/ui/Spinner'
 import RideMap from '@/components/ui/RideMap'
 import UserAvatar from '@/components/ui/UserAvatar'
+import PaymentMethodBadges from '@/components/ui/PaymentMethodBadges'
 
 const VEHICLE_ICONS  = { Tricycle: Car, Timbol: Bus, Multicab: Bus }
 const VEHICLE_COLORS = {
@@ -52,7 +53,7 @@ export default function Home() {
     setLoading(true)
     const [bookingsRes, fareRes] = await Promise.all([
       supabase.from('bookings')
-        .select('*, drivers!driver_id(name, plate, vehicle_type, rating, color, user_id)')
+        .select('*, drivers!driver_id(name, plate, vehicle_type, rating, color, user_id, payment_methods)')
         .eq('customer_id', profile.id)
         .order('created_at', { ascending: false })
         .limit(10),
@@ -134,21 +135,24 @@ export default function Home() {
               <RideMap pickup={activeBooking.pickup} dropoff={activeBooking.dropoff} height={130} className="mb-3" />
               {/* Driver info */}
               {activeBooking.drivers && (
-                <div className="flex items-center gap-2.5 bg-surface rounded-xl p-2.5">
-                  <UserAvatar
-                    userId={activeBooking.drivers.user_id}
-                    name={activeBooking.drivers.name}
-                    color={activeBooking.drivers.color || '#2E7D32'}
-                    size={32}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-bold text-navy truncate">{activeBooking.drivers.name}</p>
-                    <p className="text-[10px] text-sub">{activeBooking.drivers.plate} · {activeBooking.drivers.vehicle_type}</p>
+                <div className="bg-surface rounded-xl p-2.5 space-y-2">
+                  <div className="flex items-center gap-2.5">
+                    <UserAvatar
+                      userId={activeBooking.drivers.user_id}
+                      name={activeBooking.drivers.name}
+                      color={activeBooking.drivers.color || '#2E7D32'}
+                      size={32}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-navy truncate">{activeBooking.drivers.name}</p>
+                      <p className="text-[10px] text-sub">{activeBooking.drivers.plate} · {activeBooking.drivers.vehicle_type}</p>
+                    </div>
+                    <div className="flex items-center gap-0.5 text-amber-500 text-xs font-bold flex-shrink-0">
+                      <Star size={11} fill="currentColor" />
+                      {Number(activeBooking.drivers.rating||0).toFixed(1)}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-0.5 text-amber-500 text-xs font-bold flex-shrink-0">
-                    <Star size={11} fill="currentColor" />
-                    {Number(activeBooking.drivers.rating||0).toFixed(1)}
-                  </div>
+                  <PaymentMethodBadges methods={activeBooking.drivers.payment_methods} />
                 </div>
               )}
             </div>

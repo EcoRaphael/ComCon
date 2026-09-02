@@ -6,6 +6,7 @@ import { useToast } from '@/lib/ToastContext'
 import { Eye, EyeOff, UserCircle2, Bike, ArrowLeft, CheckCircle2, Camera, Image, X, Mail } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
 import CameraCapture from '@/components/ui/CameraCapture'
+import NominatimAddressPicker from '@/components/ui/NominatimAddressPicker'
 import { supabase } from '@/lib/supabase/client'
 
 // Supabase (and network failures generally) don't always throw a plain
@@ -208,7 +209,7 @@ function CommuterPanel({ onBack, onSwitch }) {
   }
 
   const [lf, setLf] = useState({ email: '', password: '' })
-  const [rf, setRf] = useState({ name: '', email: '', phone: '', address: '', password: '', confirm: '' })
+  const [rf, setRf] = useState({ name: '', email: '', phone: '', address: '', addressLat: null, addressLng: null, password: '', confirm: '' })
 
   const accent = 'focus:border-blue-400'
 
@@ -423,11 +424,15 @@ function CommuterPanel({ onBack, onSwitch }) {
               onChange={e => setRf(p => ({ ...p, name: e.target.value }))} disabled={loading} accent={accent} />
             <Field label="Email *" type="email" placeholder="juan@email.com" value={rf.email}
               onChange={e => setRf(p => ({ ...p, email: e.target.value }))} disabled={loading} accent={accent} />
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Phone" placeholder="+63 9XX XXX XXXX" value={rf.phone}
-                onChange={e => setRf(p => ({ ...p, phone: e.target.value }))} disabled={loading} accent={accent} />
-              <Field label="Address" placeholder="Brgy., Calbayog" value={rf.address}
-                onChange={e => setRf(p => ({ ...p, address: e.target.value }))} disabled={loading} accent={accent} />
+            <Field label="Phone" placeholder="+63 9XX XXX XXXX" value={rf.phone}
+              onChange={e => setRf(p => ({ ...p, phone: e.target.value }))} disabled={loading} accent={accent} />
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-widest text-sub ml-1">Address</label>
+              <NominatimAddressPicker
+                value={{ address: rf.address }}
+                onChange={val => setRf(p => ({ ...p, address: val.address, addressLat: val.lat, addressLng: val.lng }))}
+                disabled={loading}
+              />
             </div>
             <Field label="Password *" type="password" placeholder="Min. 8 characters" value={rf.password}
               onChange={e => setRf(p => ({ ...p, password: e.target.value }))} disabled={loading} accent={accent} />
@@ -451,6 +456,11 @@ function CommuterPanel({ onBack, onSwitch }) {
 
 // ── Driver Auth Panel ───────────────────────────────────────────
 const VEHICLE_TYPES = ['Tricycle', 'Multicab', 'Timbol']
+const PAYMENT_METHODS = [
+  { key: 'cash',  label: 'Cash',  icon: '💵' },
+  { key: 'gcash', label: 'GCash', icon: '📱' },
+  { key: 'maya',  label: 'Maya',  icon: '💳' },
+]
 
 function DriverPanel({ onBack, onSwitch }) {
   const { signIn, signUp } = useAuth()
@@ -473,10 +483,19 @@ function DriverPanel({ onBack, onSwitch }) {
 
   const [lf, setLf] = useState({ email: '', password: '' })
   const [rf, setRf] = useState({
-    name: '', email: '', phone: '', address: '',
-    vehicleType: '', route: '',
+    name: '', email: '', phone: '', address: '', addressLat: null, addressLng: null,
+    vehicleType: '', route: '', paymentMethods: ['cash'],
     password: '', confirm: ''
   })
+
+  const togglePaymentMethod = (key) => {
+    setRf(prev => ({
+      ...prev,
+      paymentMethods: prev.paymentMethods.includes(key)
+        ? prev.paymentMethods.filter(m => m !== key)
+        : [...prev.paymentMethods, key],
+    }))
+  }
 
   // Document photos — driver's license, OR (Official Receipt), CR
   // (Certificate of Registration). Each field holds { file, previewUrl }.
@@ -582,6 +601,8 @@ function DriverPanel({ onBack, onSwitch }) {
       return setError('Name, email, password, and vehicle type are required.')
     if (rf.password.length < 8) return setError('Password must be at least 8 characters.')
     if (rf.password !== rf.confirm) return setError('Passwords do not match.')
+    if (rf.paymentMethods.length === 0)
+      return setError('Select at least one payment method you accept (Cash, GCash, or Maya).')
     if (!docs.license_front || !docs.license_back || !docs.or || !docs.cr)
       return setError('Please upload photos of your License (front and back), OR, and CR — admin needs these to verify your account.')
     setLoading(true)
@@ -599,6 +620,8 @@ function DriverPanel({ onBack, onSwitch }) {
         email: rf.email.trim().toLowerCase(),
         phone: rf.phone?.trim() || null,
         address: rf.address?.trim() || null,
+        address_lat: rf.addressLat ?? null,
+        address_lng: rf.addressLng ?? null,
         role: 'driver', status: 'active',
       })
       if (userErr) throw userErr
@@ -621,6 +644,7 @@ function DriverPanel({ onBack, onSwitch }) {
         status: 'inactive', verified: false,
         rating: 0, trips: 0, earnings: 0,
         color: '#E84C27',
+        payment_methods: rf.paymentMethods,
       })
       if (driverErr) throw driverErr
 
@@ -751,17 +775,18 @@ function DriverPanel({ onBack, onSwitch }) {
               <input type="email" className={inputCls} placeholder="driver@email.com"
                 value={rf.email} onChange={e => setRf(p => ({ ...p, email: e.target.value }))} disabled={loading} />
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className={labelCls}>Phone</label>
-                <input className={inputCls} placeholder="09XX XXX XXXX"
-                  value={rf.phone} onChange={e => setRf(p => ({ ...p, phone: e.target.value }))} disabled={loading} />
-              </div>
-              <div>
-                <label className={labelCls}>Address</label>
-                <input className={inputCls} placeholder="Brgy., Calbayog"
-                  value={rf.address} onChange={e => setRf(p => ({ ...p, address: e.target.value }))} disabled={loading} />
-              </div>
+            <div>
+              <label className={labelCls}>Phone</label>
+              <input className={inputCls} placeholder="09XX XXX XXXX"
+                value={rf.phone} onChange={e => setRf(p => ({ ...p, phone: e.target.value }))} disabled={loading} />
+            </div>
+            <div>
+              <label className={labelCls}>Address</label>
+              <NominatimAddressPicker
+                value={{ address: rf.address }}
+                onChange={val => setRf(p => ({ ...p, address: val.address, addressLat: val.lat, addressLng: val.lng }))}
+                disabled={loading}
+              />
             </div>
 
             <p className="text-[10px] font-black uppercase tracking-widest text-cta border-b border-orange-100 pb-1 pt-1">Vehicle Info</p>
@@ -780,6 +805,32 @@ function DriverPanel({ onBack, onSwitch }) {
               <label className={labelCls}>Route</label>
               <input className={inputCls} placeholder="Rawis–Maybog"
                 value={rf.route} onChange={e => setRf(p => ({ ...p, route: e.target.value }))} disabled={loading} />
+            </div>
+
+            <p className="text-[10px] font-black uppercase tracking-widest text-cta border-b border-orange-100 pb-1 pt-1">Payment Methods</p>
+            <p className="text-[11px] text-sub -mt-1">
+              Select every method you accept — commuters will see this before booking with you. At least one is required.
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {PAYMENT_METHODS.map(({ key, label, icon }) => {
+                const selected = rf.paymentMethods.includes(key)
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => togglePaymentMethod(key)}
+                    disabled={loading}
+                    className={`flex flex-col items-center gap-1 py-3 rounded-2xl border-2 text-xs font-bold transition-colors ${
+                      selected
+                        ? 'border-cta bg-orange-50 text-cta'
+                        : 'border-border text-sub hover:border-orange-200'
+                    }`}
+                  >
+                    <span className="text-lg">{icon}</span>
+                    {label}
+                  </button>
+                )
+              })}
             </div>
 
             <p className="text-[10px] font-black uppercase tracking-widest text-cta border-b border-orange-100 pb-1 pt-1">Verification Documents</p>
