@@ -24,7 +24,7 @@ import { useState, useRef, useEffect } from 'react'
 import { MapPin, Search, X, Loader2 } from 'lucide-react'
 
 // Calbayog City bounding box — biases results, doesn't hard-restrict.
-const VIEWBOX = '124.50,12.15,124.65,12.00' // west,north,east,south
+const VIEWBOX = '124.2415,12.3394,124.8426,11.9653' // west,north,east,south
 
 export default function NominatimAddressPicker({ value, onChange, placeholder = 'Search your address...', disabled }) {
   const [query, setQuery] = useState(value?.address || '')
