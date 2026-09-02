@@ -11,11 +11,11 @@ import UserAvatar from '@/components/ui/UserAvatar'
 import PaymentMethodBadges from '@/components/ui/PaymentMethodBadges'
 
 const VEHICLE_ICONS = { Tricycle: Car, Timbol: Bus, Multicab: Bus }
-const METHODS = [
-  { id: 'cash', label: 'Cash', icon: '💵', available: true },
-  { id: 'gcash', label: 'GCash', icon: '📱', available: false },
-  { id: 'maya', label: 'Maya', icon: '💳', available: false },
-]
+const METHOD_META = {
+  cash:  { label: 'Cash',  icon: '💵' },
+  gcash: { label: 'GCash', icon: '📱' },
+  maya:  { label: 'Maya',  icon: '💳' },
+}
 
 export default function RoutesPage() {
   const { profile } = useAuth()
@@ -326,7 +326,15 @@ export default function RoutesPage() {
                 ) : (
                   availableDrivers.map(d => (
                     <button key={d.id}
-                      onClick={() => { setDriver(d); setStep('confirm') }}
+                      onClick={() => {
+                        setDriver(d)
+                        // Reset payment method to something this specific
+                        // driver actually accepts — carrying over a stale
+                        // choice from a previously-selected driver could
+                        // silently mismatch what this driver supports.
+                        setMethod(d.payment_methods?.[0] || 'cash')
+                        setStep('confirm')
+                      }}
                       className={`w-full flex items-center gap-3 p-4 rounded-2xl border-2 transition-all text-left
                         ${driver?.id === d.id ? 'border-green bg-green-light' : 'border-border hover:border-green/40'}`}>
                       <UserAvatar userId={d.user_id} name={d.name} color={d.color} size={44} />
@@ -392,31 +400,39 @@ export default function RoutesPage() {
                   <ChevronRight size={18} className="text-sub flex-shrink-0" />
                 </button>
 
-                {/* Payment method */}
+                {/* Payment method — availability is per-driver, not a
+                    global "feature not built yet" flag. Any method the
+                    driver accepts is selectable as an informal/offline
+                    payment (driver confirms receipt directly), same
+                    pattern already used for cash. */}
                 <div>
                   <label className="field-label">Payment Method</label>
                   <div className="flex gap-2">
-                    {METHODS.map(m => (
-                      <button key={m.id}
-                        onClick={() => m.available && setMethod(m.id)}
-                        disabled={!m.available}
-                        type="button"
-                        className={`relative flex-1 flex flex-col items-center gap-1 py-3 rounded-2xl border-2 text-xs font-bold transition-all
-                          ${method === m.id ? 'border-green bg-green-light text-green' : 'border-border text-sub'}
-                          ${!m.available ? 'opacity-40 cursor-not-allowed' : ''}`}>
-                        <span className="text-xl">{m.icon}</span>
-                        {m.label}
-                        {!m.available && (
-                          <span className="absolute -top-2 -right-1 bg-amber-100 text-amber-700 text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-tighter">
-                            Soon
-                          </span>
-                        )}
-                      </button>
-                    ))}
+                    {['cash', 'gcash', 'maya'].map(id => {
+                      const meta = METHOD_META[id]
+                      const available = (driver?.payment_methods || ['cash']).includes(id)
+                      return (
+                        <button key={id}
+                          onClick={() => available && setMethod(id)}
+                          disabled={!available}
+                          type="button"
+                          className={`relative flex-1 flex flex-col items-center gap-1 py-3 rounded-2xl border-2 text-xs font-bold transition-all
+                            ${method === id ? 'border-green bg-green-light text-green' : 'border-border text-sub'}
+                            ${!available ? 'opacity-40 cursor-not-allowed' : ''}`}>
+                          <span className="text-xl">{meta.icon}</span>
+                          {meta.label}
+                          {!available && (
+                            <span className="absolute -top-2 -right-1 bg-amber-100 text-amber-700 text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-tighter">
+                              Not accepted
+                            </span>
+                          )}
+                        </button>
+                      )
+                    })}
                   </div>
-                  {!METHODS.find(m => m.id === method)?.available && (
+                  {!(driver?.payment_methods || ['cash']).includes(method) && (
                     <p className="text-[10px] text-amber-600 font-medium mt-2">
-                      ⚠️ Online payment isn't available yet — please select Cash to continue.
+                      ⚠️ {driver?.name || 'This driver'} doesn't accept that method — please choose one of the highlighted options.
                     </p>
                   )}
                 </div>
@@ -430,7 +446,9 @@ export default function RoutesPage() {
                   <CreditCard size={28} className="text-white/40" />
                 </div>
 
-                <button onClick={handleBookNow} disabled={booking || method !== 'cash'}
+                <button
+                  onClick={handleBookNow}
+                  disabled={booking || !(driver?.payment_methods || ['cash']).includes(method)}
                   className="btn-cta w-full py-4 flex items-center justify-center gap-2 text-base disabled:opacity-40 disabled:cursor-not-allowed">
                   {booking ? <Spinner size={22} /> : 'Confirm Booking'}
                 </button>
