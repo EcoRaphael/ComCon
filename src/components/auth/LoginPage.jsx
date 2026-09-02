@@ -419,14 +419,14 @@ function CommuterPanel({ onBack, onSwitch }) {
           </form>
         ) : (
           <form onSubmit={handleRegister} className="space-y-3">
-            <Field label="Full Name *" placeholder="Juan dela Cruz" value={rf.name}
+            <Field label="Full Name *" placeholder="Juan Dela Cruz" value={rf.name}
               onChange={e => setRf(p => ({ ...p, name: e.target.value }))} disabled={loading} accent={accent} />
-            <Field label="Email *" type="email" placeholder="juan@email.com" value={rf.email}
+            <Field label="Email *" type="email" placeholder="CommuterConnect@gmail.com" value={rf.email}
               onChange={e => setRf(p => ({ ...p, email: e.target.value }))} disabled={loading} accent={accent} />
             <div className="grid grid-cols-2 gap-3">
               <Field label="Phone" placeholder="+63 9XX XXX XXXX" value={rf.phone}
                 onChange={e => setRf(p => ({ ...p, phone: e.target.value }))} disabled={loading} accent={accent} />
-              <Field label="Address" placeholder="Brgy., Calbayog" value={rf.address}
+              <Field label="Address" placeholder="Brgy. San Policarpo" value={rf.address}
                 onChange={e => setRf(p => ({ ...p, address: e.target.value }))} disabled={loading} accent={accent} />
             </div>
             <Field label="Password *" type="password" placeholder="Min. 8 characters" value={rf.password}
@@ -723,7 +723,7 @@ function DriverPanel({ onBack, onSwitch }) {
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
               <label className={labelCls}>Email</label>
-              <input type="email" className={inputCls} placeholder="driver@email.com"
+              <input type="email" className={inputCls} placeholder="CommuterConnect@gmail.com"
                 value={lf.email} onChange={e => setLf(p => ({ ...p, email: e.target.value }))} disabled={loading} />
             </div>
             <div>
@@ -743,12 +743,12 @@ function DriverPanel({ onBack, onSwitch }) {
             <p className="text-[10px] font-black uppercase tracking-widest text-cta border-b border-orange-100 pb-1">Personal Info</p>
             <div>
               <label className={labelCls}>Full Name *</label>
-              <input className={inputCls} placeholder="Juan dela Cruz"
+              <input className={inputCls} placeholder="Juan Dela Cruz"
                 value={rf.name} onChange={e => setRf(p => ({ ...p, name: e.target.value }))} disabled={loading} />
             </div>
             <div>
               <label className={labelCls}>Email *</label>
-              <input type="email" className={inputCls} placeholder="driver@email.com"
+              <input type="email" className={inputCls} placeholder="CommuterConnect@gmail.com"
                 value={rf.email} onChange={e => setRf(p => ({ ...p, email: e.target.value }))} disabled={loading} />
             </div>
             <div className="grid grid-cols-2 gap-2">
@@ -759,7 +759,7 @@ function DriverPanel({ onBack, onSwitch }) {
               </div>
               <div>
                 <label className={labelCls}>Address</label>
-                <input className={inputCls} placeholder="Brgy., Calbayog"
+                <input className={inputCls} placeholder="Brgy. San Policarpo"
                   value={rf.address} onChange={e => setRf(p => ({ ...p, address: e.target.value }))} disabled={loading} />
               </div>
             </div>
