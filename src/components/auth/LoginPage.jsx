@@ -8,6 +8,26 @@ import Spinner from '@/components/ui/Spinner'
 import CameraCapture from '@/components/ui/CameraCapture'
 import { supabase } from '@/lib/supabase/client'
 
+// Supabase (and network failures generally) don't always throw a plain
+// Error with a string .message — sometimes it's a GoTrue error shape with
+// .error_description or .msg instead, sometimes it's a raw object, and in
+// rare cases (like a broken custom SMTP response) something malformed
+// enough that err.message itself is an empty object. Rendering that
+// directly produces a useless blank "{}" in the UI — this always finds
+// *something* displayable instead.
+function getErrorMessage(err) {
+  if (!err) return 'Something went wrong. Please try again.'
+  if (typeof err === 'string') return err
+  if (typeof err.message === 'string' && err.message.trim()) return err.message
+  if (typeof err.error_description === 'string' && err.error_description.trim()) return err.error_description
+  if (typeof err.msg === 'string' && err.msg.trim()) return err.msg
+  try {
+    const str = JSON.stringify(err)
+    if (str && str !== '{}') return str
+  } catch {}
+  return 'Something went wrong. Please try again.'
+}
+
 
 // ── Wrong Portal Screen ─────────────────────────────────────────
 function WrongPortalScreen({ wrongRole, onGoCorrect, onBack }) {
@@ -235,7 +255,7 @@ function CommuterPanel({ onBack, onSwitch }) {
         return
       }
       navigate('/', { replace: true })
-    } catch (err) { setError(err.message) }
+    } catch (err) { setError(getErrorMessage(err)) }
     finally { setLoading(false) }
   }
 
@@ -251,7 +271,7 @@ function CommuterPanel({ onBack, onSwitch }) {
       await startSignUp(rf)
       setStep('otp')
       setResendCooldown(30)
-    } catch (err) { setError(err.message) }
+    } catch (err) { setError(getErrorMessage(err)) }
     finally { setLoading(false) }
   }
 
@@ -264,7 +284,7 @@ function CommuterPanel({ onBack, onSwitch }) {
     try {
       await verifySignUpOtp(rf, otp.trim())
       setDone(true)
-    } catch (err) { setError(err.message) }
+    } catch (err) { setError(getErrorMessage(err)) }
     finally { setLoading(false) }
   }
 
@@ -275,7 +295,7 @@ function CommuterPanel({ onBack, onSwitch }) {
       await resendSignUpOtp(rf.email)
       toast('A new code has been sent to your email.')
       setResendCooldown(30)
-    } catch (err) { setError(err.message) }
+    } catch (err) { setError(getErrorMessage(err)) }
     finally { setResending(false) }
   }
 
@@ -467,7 +487,7 @@ function DriverPanel({ onBack, onSwitch }) {
   // browsers largely ignore the `capture` attribute, and behavior varies
   // across mobile browsers/webviews — so "take a photo" needed to be a
   // real, guaranteed feature rather than something left to chance.
-  const [docs, setDocs] = useState({ license: null, or: null, cr: null })
+  const [docs, setDocs] = useState({ license_front: null, license_back: null, or: null, cr: null })
   const [cameraFor, setCameraFor] = useState(null) // which doc key the camera modal is open for
   const MAX_DOC_MB = 8
 
@@ -552,7 +572,7 @@ function DriverPanel({ onBack, onSwitch }) {
         return
       }
       navigate('/driver', { replace: true })
-    } catch (err) { setError(err.message) }
+    } catch (err) { setError(getErrorMessage(err)) }
     finally { setLoading(false) }
   }
 
@@ -562,8 +582,8 @@ function DriverPanel({ onBack, onSwitch }) {
       return setError('Name, email, password, and vehicle type are required.')
     if (rf.password.length < 8) return setError('Password must be at least 8 characters.')
     if (rf.password !== rf.confirm) return setError('Passwords do not match.')
-    if (!docs.license || !docs.or || !docs.cr)
-      return setError('Please upload photos of your License, OR, and CR — admin needs these to verify your account.')
+    if (!docs.license_front || !docs.license_back || !docs.or || !docs.cr)
+      return setError('Please upload photos of your License (front and back), OR, and CR — admin needs these to verify your account.')
     setLoading(true)
     try {
       const { data: authData, error: signUpError } = await supabase.auth.signUp({
@@ -604,7 +624,7 @@ function DriverPanel({ onBack, onSwitch }) {
       })
       if (driverErr) throw driverErr
 
-      // Upload the 3 document photos to the driver's own storage folder,
+      // Upload the 4 document photos to the driver's own storage folder,
       // then record the resulting paths on their drivers row so admin can
       // pull up signed URLs to review them before verifying.
       const uploadDoc = async (key, file) => {
@@ -617,15 +637,17 @@ function DriverPanel({ onBack, onSwitch }) {
         return path
       }
 
-      const [licensePath, orPath, crPath] = await Promise.all([
-        uploadDoc('license', docs.license.file),
+      const [licenseFrontPath, licenseBackPath, orPath, crPath] = await Promise.all([
+        uploadDoc('license_front', docs.license_front.file),
+        uploadDoc('license_back', docs.license_back.file),
         uploadDoc('or', docs.or.file),
         uploadDoc('cr', docs.cr.file),
       ])
 
       const { error: pathErr } = await supabase.from('drivers')
         .update({
-          license_photo_path: licensePath,
+          license_photo_path: licenseFrontPath,
+          license_back_photo_path: licenseBackPath,
           or_photo_path: orPath,
           cr_photo_path: crPath,
         })
@@ -633,7 +655,7 @@ function DriverPanel({ onBack, onSwitch }) {
       if (pathErr) throw pathErr
 
       setDone(true)
-    } catch (err) { setError(err.message) }
+    } catch (err) { setError(getErrorMessage(err)) }
     finally { setLoading(false) }
   }
 
@@ -765,9 +787,10 @@ function DriverPanel({ onBack, onSwitch }) {
               Take a photo or upload from your gallery — admin reviews these before approving your account.
             </p>
             {[
-              { key: 'license', label: "Driver's License *" },
-              { key: 'or',      label: 'OR (Official Receipt) *' },
-              { key: 'cr',      label: 'CR (Certificate of Registration) *' },
+              { key: 'license_front', label: "Driver's License — Front *" },
+              { key: 'license_back',  label: "Driver's License — Back *" },
+              { key: 'or',            label: 'OR (Official Receipt) *' },
+              { key: 'cr',            label: 'CR (Certificate of Registration) *' },
             ].map(({ key, label }) => (
               <div key={key}>
                 <label className={labelCls}>{label}</label>
