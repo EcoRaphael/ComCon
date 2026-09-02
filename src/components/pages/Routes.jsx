@@ -49,7 +49,8 @@ export default function RoutesPage() {
       supabase.from('drivers')
         .select('id, name, plate, vehicle_type, route, rating, color, status, verified, user_id, payment_methods')
         .eq('status', 'active')
-        .eq('verified', true),
+        .eq('verified', true)
+        .order('rating', { ascending: false }),
     ])
     setRoutes(routesRes.data || [])
     setFareMatrix(fareRes.data || [])
@@ -71,9 +72,18 @@ export default function RoutesPage() {
     return f ? Number(f.base_fare) : 0
   }
 
+  // No cap here — every active, verified driver for this vehicle type
+  // should be selectable. There used to be a .slice(0, 5) here, which
+  // combined with the query above having no explicit order, meant
+  // whichever driver happened to land past position 5 in Postgres's
+  // arbitrary (unordered) row scan simply vanished from the list —
+  // including after something as unrelated as a payment methods update,
+  // since an UPDATE can shift a row's physical position under MVCC. Now
+  // that the query is explicitly ordered, the list itself scrolls
+  // (already supported by the UI) rather than silently dropping drivers.
   const availableDrivers = drivers.filter(d =>
     vehicle && d.vehicle_type === vehicle
-  ).slice(0, 5)
+  )
 
   const estimatedFare = selected && vehicle
     ? getBaseFare(vehicle)
