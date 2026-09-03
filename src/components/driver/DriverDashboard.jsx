@@ -36,6 +36,37 @@ export default function DriverDashboard() {
     return () => supabase.removeChannel(ch)
   }, [profile?.id, driver?.id])
 
+  // Realtime — the driver's OWN record. Without this, admin verifying
+  // (or suspending, or anything else) only updated admin's own screen
+  // instantly (an optimistic local state update on their end) — the
+  // driver themselves had no way to see it happen live and would need to
+  // manually refresh to find out they'd been verified.
+  useEffect(() => {
+    if (!profile?.id) return
+    const ch = supabase
+      .channel('driver-own-record')
+      .on('postgres_changes', {
+        event: 'UPDATE', schema: 'public', table: 'drivers',
+        filter: `user_id=eq.${profile.id}`,
+      }, payload => {
+        setDriver(prev => {
+          if (!prev) return prev
+          const wasVerified = prev.verified
+          const nowVerified = payload.new.verified
+          if (!wasVerified && nowVerified) {
+            toast('✅ Your account has been verified! You can now go online.')
+          }
+          // rating is computed client-side from the ratings table in
+          // fetchData(), not stored on the drivers row itself — keep the
+          // already-computed value rather than overwriting it with
+          // whatever stale/absent value the raw row update carries.
+          return { ...prev, ...payload.new, rating: prev.rating }
+        })
+      })
+      .subscribe()
+    return () => supabase.removeChannel(ch)
+  }, [profile?.id])
+
   async function fetchData() {
     setLoading(true)
     // Get driver record by user_id
