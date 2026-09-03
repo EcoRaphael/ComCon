@@ -5,20 +5,26 @@ import { supabase } from '@/lib/supabase/client'
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
-  const [session, setSession] = useState(undefined)
-  const [profile, setProfile] = useState(null)
-  const [loadingAuth, setLoadingAuth] = useState(true)
+  const [session,        setSession]       = useState(undefined)
+  const [profile,        setProfile]       = useState(null)
+  const [loadingAuth,    setLoadingAuth]   = useState(true)
 
   const fetchProfile = useCallback(async (userId) => {
     if (!userId) { setProfile(null); return }
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('users')
       .select('id, name, email, phone, address, role, status')
       .eq('id', userId)
-      .single()
+      .maybeSingle()
+    if (error) {
+      console.error('[AuthContext] failed to fetch profile:', error)
+      return
+    }
     if (data) {
       setProfile(data)
-      try { localStorage.setItem('cc-commuter-profile', JSON.stringify(data)) } catch { }
+      try { localStorage.setItem('cc-commuter-profile', JSON.stringify(data)) } catch {}
+    } else {
+      console.warn('[AuthContext] no matching users row for authenticated id:', userId)
     }
   }, [])
 
@@ -30,14 +36,22 @@ export function AuthProvider({ children }) {
         }
         setSession(session ?? null)
         if (session?.user?.id) {
-          // Try cache first
+          // Show cached profile instantly for a fast first paint, but do
+          // NOT mark auth as "loaded" from the cache alone — loadingAuth
+          // only flips once the fresh fetch below actually resolves.
+          // Setting it false here too was the bug: ProtectedRoute gates
+          // rendering purely on loadingAuth, so the app would render
+          // immediately with stale cached data (old status, old role, old
+          // profile fields) and only silently self-correct once the real
+          // fetch landed a moment later — visible as "wrong data on first
+          // login" whenever the cache was out of date.
           try {
             const cached = localStorage.getItem('cc-commuter-profile')
             if (cached) {
               const p = JSON.parse(cached)
-              if (p?.id === session.user.id) { setProfile(p); setLoadingAuth(false) }
+              if (p?.id === session.user.id) setProfile(p)
             }
-          } catch { }
+          } catch {}
           fetchProfile(session.user.id).finally(() => setLoadingAuth(false))
         } else {
           setProfile(null)
@@ -47,18 +61,6 @@ export function AuthProvider({ children }) {
     )
     return () => subscription.unsubscribe()
   }, [fetchProfile])
-
-  const signIn = useCallback(async (email, password) => {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) throw error
-    // Check role
-    const { data: row } = await supabase
-      .from('users').select('role, status').eq('id', data.user.id).single()
-    if (!row) { await supabase.auth.signOut(); throw new Error('Account not found.') }
-    if (row.role === 'admin') { await supabase.auth.signOut(); throw new Error('Use the Admin Panel to log in as administrator.') }
-    if (row.status === 'suspended') { await supabase.auth.signOut(); throw new Error('Your account has been suspended. Contact the administrator.') }
-    return data
-  }, [])
 
   // Registration is split into two steps so the profile row only gets
   // created AFTER the person actually verifies their email via OTP —
@@ -73,9 +75,9 @@ export function AuthProvider({ children }) {
       password: form.password,
       options: {
         data: {
-          name: form.name,
-          phone: form.phone || null,
-          address: form.address || null,
+          name:    form.name,
+          phone:   form.phone    || null,
+          address: form.address  || null,
         }
       }
     })
@@ -99,26 +101,30 @@ export function AuthProvider({ children }) {
     if (!userId) throw new Error('Verification succeeded but no user ID was returned.')
 
     const { error: rowError } = await supabase.from('users').insert({
-      id: userId,
-      name: form.name.trim(),
-      email: form.email.trim().toLowerCase(),
-      phone: form.phone?.trim() || null,
-      address: form.address?.trim() || null,
-      role: 'customer',
-      status: 'active',
+      id:          userId,
+      name:        form.name.trim(),
+      email:       form.email.trim().toLowerCase(),
+      phone:       form.phone?.trim()   || null,
+      address:     form.address?.trim() || null,
+      address_lat: form.addressLat ?? null,
+      address_lng: form.addressLng ?? null,
+      role:    'customer',
+      status:  'active',
     })
 
     // If RLS blocks direct insert, try upsert instead
     if (rowError) {
       console.warn('[verifySignUpOtp] insert failed, trying upsert:', rowError.message)
       const { error: upsertError } = await supabase.from('users').upsert({
-        id: userId,
-        name: form.name.trim(),
-        email: form.email.trim().toLowerCase(),
-        phone: form.phone?.trim() || null,
-        address: form.address?.trim() || null,
-        role: 'customer',
-        status: 'active',
+        id:          userId,
+        name:        form.name.trim(),
+        email:       form.email.trim().toLowerCase(),
+        phone:       form.phone?.trim()   || null,
+        address:     form.address?.trim() || null,
+        address_lat: form.addressLat ?? null,
+        address_lng: form.addressLng ?? null,
+        role:    'customer',
+        status:  'active',
       })
       if (upsertError) throw upsertError
     }
@@ -137,18 +143,18 @@ export function AuthProvider({ children }) {
     await supabase.auth.signOut()
     setSession(null)
     setProfile(null)
-    try { localStorage.removeItem('cc-commuter-profile') } catch { }
+    try { localStorage.removeItem('cc-commuter-profile') } catch {}
   }, [])
 
-  const isLoggedIn = !!session
-  const isCustomer = profile?.role === 'customer'
-  const isDriver = profile?.role === 'driver'
+  const isLoggedIn   = !!session
+  const isCustomer   = profile?.role === 'customer'
+  const isDriver     = profile?.role === 'driver'
 
   return (
     <AuthContext.Provider value={{
       session, profile, setProfile,
       loadingAuth, isLoggedIn, isCustomer, isDriver,
-      signIn, startSignUp, verifySignUpOtp, resendSignUpOtp, signOut,
+      startSignUp, verifySignUpOtp, resendSignUpOtp, signOut,
     }}>
       {children}
     </AuthContext.Provider>
