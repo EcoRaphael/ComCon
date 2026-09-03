@@ -7,13 +7,15 @@ import { useToast } from '@/lib/ToastContext'
 import { Search, MapPin, ArrowRight, Car, Bus, ChevronRight, X, User, CreditCard } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
 import LocationPicker from '@/components/ui/LocationPicker'
+import UserAvatar from '@/components/ui/UserAvatar'
+import PaymentMethodBadges from '@/components/ui/PaymentMethodBadges'
 
 const VEHICLE_ICONS = { Tricycle: Car, Timbol: Bus, Multicab: Bus }
-const METHODS = [
-  { id: 'cash', label: 'Cash', icon: '💵', available: true },
-  { id: 'gcash', label: 'GCash', icon: '📱', available: false },
-  { id: 'maya', label: 'Maya', icon: '💳', available: false },
-]
+const METHOD_META = {
+  cash:  { label: 'Cash',  icon: '💵' },
+  gcash: { label: 'GCash', icon: '📱' },
+  maya:  { label: 'Maya',  icon: '💳' },
+}
 
 export default function RoutesPage() {
   const { profile } = useAuth()
@@ -45,9 +47,10 @@ export default function RoutesPage() {
       supabase.from('routes').select('*').eq('status', 'active').order('name'),
       supabase.from('fare_matrix').select('*'),
       supabase.from('drivers')
-        .select('id, name, plate, vehicle_type, route, rating, color, status, verified')
+        .select('id, name, plate, vehicle_type, route, rating, color, status, verified, user_id, payment_methods')
         .eq('status', 'active')
-        .eq('verified', true),
+        .eq('verified', true)
+        .order('rating', { ascending: false }),
     ])
     setRoutes(routesRes.data || [])
     setFareMatrix(fareRes.data || [])
@@ -69,9 +72,18 @@ export default function RoutesPage() {
     return f ? Number(f.base_fare) : 0
   }
 
+  // No cap here — every active, verified driver for this vehicle type
+  // should be selectable. There used to be a .slice(0, 5) here, which
+  // combined with the query above having no explicit order, meant
+  // whichever driver happened to land past position 5 in Postgres's
+  // arbitrary (unordered) row scan simply vanished from the list —
+  // including after something as unrelated as a payment methods update,
+  // since an UPDATE can shift a row's physical position under MVCC. Now
+  // that the query is explicitly ordered, the list itself scrolls
+  // (already supported by the UI) rather than silently dropping drivers.
   const availableDrivers = drivers.filter(d =>
     vehicle && d.vehicle_type === vehicle
-  ).slice(0, 5)
+  )
 
   const estimatedFare = selected && vehicle
     ? getBaseFare(vehicle)
@@ -314,16 +326,22 @@ export default function RoutesPage() {
                 ) : (
                   availableDrivers.map(d => (
                     <button key={d.id}
-                      onClick={() => { setDriver(d); setStep('confirm') }}
+                      onClick={() => {
+                        setDriver(d)
+                        // Reset payment method to something this specific
+                        // driver actually accepts — carrying over a stale
+                        // choice from a previously-selected driver could
+                        // silently mismatch what this driver supports.
+                        setMethod(d.payment_methods?.[0] || 'cash')
+                        setStep('confirm')
+                      }}
                       className={`w-full flex items-center gap-3 p-4 rounded-2xl border-2 transition-all text-left
                         ${driver?.id === d.id ? 'border-green bg-green-light' : 'border-border hover:border-green/40'}`}>
-                      <div className="w-11 h-11 rounded-full flex items-center justify-center text-white font-black text-sm"
-                        style={{ background: d.color || '#2E7D32' }}>
-                        {d.name?.split(' ').map(w => w[0]).join('').slice(0, 2)}
-                      </div>
+                      <UserAvatar userId={d.user_id} name={d.name} color={d.color} size={44} />
                       <div className="flex-1 min-w-0">
                         <p className="font-bold text-navy text-sm">{d.name}</p>
                         <p className="text-xs text-sub">{d.vehicle_type} · {d.plate}</p>
+                        <PaymentMethodBadges methods={d.payment_methods} className="mt-1" />
                       </div>
                       <div className="text-right">
                         <p className="text-amber-500 text-sm font-bold">★ {Number(d.rating || 0).toFixed(1)}</p>
@@ -373,42 +391,48 @@ export default function RoutesPage() {
                   onClick={() => setShowDriverProfile(true)}
                   className="w-full bg-surface rounded-2xl p-4 flex items-center gap-3 text-left hover:bg-border/40 transition-colors active:scale-[0.99]"
                 >
-                  <div className="w-12 h-12 rounded-full flex items-center justify-center text-white font-black flex-shrink-0"
-                    style={{ background: driver.color || '#2E7D32' }}>
-                    {driver.name?.split(' ').map(w => w[0]).join('').slice(0, 2)}
-                  </div>
+                  <UserAvatar userId={driver.user_id} name={driver.name} color={driver.color} size={48} />
                   <div className="flex-1 min-w-0">
                     <p className="font-bold text-navy">{driver.name}</p>
                     <p className="text-xs text-sub">{driver.plate} · ★ {Number(driver.rating || 0).toFixed(1)}</p>
+                    <PaymentMethodBadges methods={driver.payment_methods} className="mt-1.5" />
                   </div>
                   <ChevronRight size={18} className="text-sub flex-shrink-0" />
                 </button>
 
-                {/* Payment method */}
+                {/* Payment method — availability is per-driver, not a
+                    global "feature not built yet" flag. Any method the
+                    driver accepts is selectable as an informal/offline
+                    payment (driver confirms receipt directly), same
+                    pattern already used for cash. */}
                 <div>
                   <label className="field-label">Payment Method</label>
                   <div className="flex gap-2">
-                    {METHODS.map(m => (
-                      <button key={m.id}
-                        onClick={() => m.available && setMethod(m.id)}
-                        disabled={!m.available}
-                        type="button"
-                        className={`relative flex-1 flex flex-col items-center gap-1 py-3 rounded-2xl border-2 text-xs font-bold transition-all
-                          ${method === m.id ? 'border-green bg-green-light text-green' : 'border-border text-sub'}
-                          ${!m.available ? 'opacity-40 cursor-not-allowed' : ''}`}>
-                        <span className="text-xl">{m.icon}</span>
-                        {m.label}
-                        {!m.available && (
-                          <span className="absolute -top-2 -right-1 bg-amber-100 text-amber-700 text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-tighter">
-                            Soon
-                          </span>
-                        )}
-                      </button>
-                    ))}
+                    {['cash', 'gcash', 'maya'].map(id => {
+                      const meta = METHOD_META[id]
+                      const available = (driver?.payment_methods || ['cash']).includes(id)
+                      return (
+                        <button key={id}
+                          onClick={() => available && setMethod(id)}
+                          disabled={!available}
+                          type="button"
+                          className={`relative flex-1 flex flex-col items-center gap-1 py-3 rounded-2xl border-2 text-xs font-bold transition-all
+                            ${method === id ? 'border-green bg-green-light text-green' : 'border-border text-sub'}
+                            ${!available ? 'opacity-40 cursor-not-allowed' : ''}`}>
+                          <span className="text-xl">{meta.icon}</span>
+                          {meta.label}
+                          {!available && (
+                            <span className="absolute -top-2 -right-1 bg-amber-100 text-amber-700 text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-tighter">
+                              Not accepted
+                            </span>
+                          )}
+                        </button>
+                      )
+                    })}
                   </div>
-                  {!METHODS.find(m => m.id === method)?.available && (
+                  {!(driver?.payment_methods || ['cash']).includes(method) && (
                     <p className="text-[10px] text-amber-600 font-medium mt-2">
-                      ⚠️ Online payment isn't available yet — please select Cash to continue.
+                      ⚠️ {driver?.name || 'This driver'} doesn't accept that method — please choose one of the highlighted options.
                     </p>
                   )}
                 </div>
@@ -422,7 +446,9 @@ export default function RoutesPage() {
                   <CreditCard size={28} className="text-white/40" />
                 </div>
 
-                <button onClick={handleBookNow} disabled={booking || method !== 'cash'}
+                <button
+                  onClick={handleBookNow}
+                  disabled={booking || !(driver?.payment_methods || ['cash']).includes(method)}
                   className="btn-cta w-full py-4 flex items-center justify-center gap-2 text-base disabled:opacity-40 disabled:cursor-not-allowed">
                   {booking ? <Spinner size={22} /> : 'Confirm Booking'}
                 </button>
@@ -450,12 +476,7 @@ export default function RoutesPage() {
             </button>
 
             <div className="flex flex-col items-center text-center pt-2">
-              <div
-                className="w-20 h-20 rounded-full flex items-center justify-center text-white font-black text-2xl mb-3"
-                style={{ background: driver.color || '#2E7D32' }}
-              >
-                {driver.name?.split(' ').map(w => w[0]).join('').slice(0, 2)}
-              </div>
+              <UserAvatar userId={driver.user_id} name={driver.name} color={driver.color} size={80} className="mb-3" />
               <h3 className="text-xl font-black text-navy">{driver.name}</h3>
               {driver.verified && (
                 <span className="inline-flex items-center gap-1 text-[11px] font-bold text-green bg-green-light px-2.5 py-0.5 rounded-full mt-1.5">
@@ -481,6 +502,15 @@ export default function RoutesPage() {
                 <p className="text-[10px] font-bold text-sub uppercase tracking-wider mb-1">Route</p>
                 <p className="font-black text-navy text-sm truncate">{driver.route || 'Anywhere'}</p>
               </div>
+            </div>
+
+            <div className="mt-4">
+              <p className="text-[10px] font-bold text-sub uppercase tracking-wider mb-2">Available Payment Methods</p>
+              {driver.payment_methods?.length > 0 ? (
+                <PaymentMethodBadges methods={driver.payment_methods} size="lg" />
+              ) : (
+                <p className="text-xs text-sub">Not specified — ask the driver directly.</p>
+              )}
             </div>
 
             <button

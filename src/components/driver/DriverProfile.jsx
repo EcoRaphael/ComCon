@@ -1,10 +1,17 @@
 // src/components/driver/DriverProfile.jsx
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '@/lib/AuthContext'
 import { useToast } from '@/lib/ToastContext'
 import { supabase } from '@/lib/supabase/client'
-import { User, Mail, Phone, Lock, Save, Edit3, LogOut, RefreshCw, AlertTriangle, ShieldCheck } from 'lucide-react'
+import { User, Mail, Phone, Lock, Save, Edit3, LogOut, RefreshCw, AlertTriangle, ShieldCheck, Wallet } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
+import AvatarPicker from '@/components/ui/AvatarPicker'
+
+const PAYMENT_METHODS = [
+  { key: 'cash',  label: 'Cash',  icon: '💵' },
+  { key: 'gcash', label: 'GCash', icon: '📱' },
+  { key: 'maya',  label: 'Maya',  icon: '💳' },
+]
 
 export default function DriverProfile() {
   const { profile, setProfile, signOut } = useAuth()
@@ -18,6 +25,60 @@ export default function DriverProfile() {
 
   const [form,   setForm]   = useState({ name: profile?.name || '', phone: profile?.phone || '' })
   const [pwForm, setPwForm] = useState({ next: '', confirm: '' })
+
+  // Payment methods live on the drivers row, not the shared users/profile
+  // row, so they need their own fetch — independent of the name/phone
+  // editing above.
+  const [paymentMethods,     setPaymentMethods]     = useState([])
+  const [editingPayment,     setEditingPayment]     = useState(false)
+  const [pendingPayment,     setPendingPayment]     = useState([])
+  const [savingPayment,      setSavingPayment]      = useState(false)
+  const [loadingPayment,     setLoadingPayment]     = useState(true)
+
+  useEffect(() => {
+    if (!profile?.id) return
+    supabase
+      .from('drivers')
+      .select('payment_methods')
+      .eq('user_id', profile.id)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (error) console.error('[DriverProfile] failed to fetch payment methods:', error)
+        setPaymentMethods(data?.payment_methods || [])
+        setLoadingPayment(false)
+      })
+      .catch((err) => {
+        console.error('[DriverProfile] unexpected error fetching payment methods:', err)
+        setLoadingPayment(false)
+      })
+  }, [profile?.id])
+
+  const togglePendingPayment = (key) => {
+    setPendingPayment(prev =>
+      prev.includes(key) ? prev.filter(m => m !== key) : [...prev, key]
+    )
+  }
+
+  const handleSavePayment = async () => {
+    if (pendingPayment.length === 0) {
+      toast('Select at least one payment method.', 'error')
+      return
+    }
+    setSavingPayment(true)
+    try {
+      const { error } = await supabase.from('drivers')
+        .update({ payment_methods: pendingPayment })
+        .eq('user_id', profile.id)
+      if (error) throw error
+      setPaymentMethods(pendingPayment)
+      toast('Payment methods updated!', 'success')
+      setEditingPayment(false)
+    } catch (err) {
+      toast('Failed to update: ' + err.message, 'error')
+    } finally {
+      setSavingPayment(false)
+    }
+  }
 
   const handleSave = async () => {
     if (!form.name.trim()) { toast('Name is required', 'error'); return }
@@ -60,9 +121,7 @@ export default function DriverProfile() {
 
       {/* Hero */}
       <div className="bg-gradient-to-br from-green-dark to-green rounded-2xl p-5 flex items-center gap-4">
-        <div className="w-16 h-16 rounded-full bg-white/20 border-2 border-white/30 flex items-center justify-center text-white font-black text-xl flex-shrink-0">
-          {initials}
-        </div>
+        <AvatarPicker profile={profile} size={64} initials={initials} />
         <div>
           <p className="text-white font-black text-lg">{profile?.name}</p>
           <p className="text-white/60 text-sm">{profile?.email}</p>
@@ -109,6 +168,66 @@ export default function DriverProfile() {
                 <span className="flex items-center gap-2 text-xs text-sub font-bold uppercase tracking-wider">{row.icon} {row.label}</span>
                 <span className="text-sm text-navy font-medium">{row.val}</span>
               </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Payment Methods */}
+      <div className="bg-white rounded-2xl shadow-sm border border-border/50 p-5">
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-xs font-bold text-sub uppercase tracking-wider flex items-center gap-1.5">
+            <Wallet size={13} /> Payment Methods
+          </p>
+          {!loadingPayment && (
+            <button
+              onClick={() => {
+                setEditingPayment(e => !e)
+                setPendingPayment(paymentMethods)
+              }}
+              className="flex items-center gap-1 text-xs font-bold text-green"
+            >
+              <Edit3 size={12} /> {editingPayment ? 'Cancel' : 'Edit'}
+            </button>
+          )}
+        </div>
+
+        {loadingPayment ? (
+          <div className="flex justify-center py-6"><Spinner size={22} /></div>
+        ) : editingPayment ? (
+          <div className="space-y-3">
+            <p className="text-xs text-sub">Select every method you accept — commuters see this before booking with you.</p>
+            <div className="grid grid-cols-3 gap-2">
+              {PAYMENT_METHODS.map(({ key, label, icon }) => {
+                const selected = pendingPayment.includes(key)
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => togglePendingPayment(key)}
+                    className={`flex flex-col items-center gap-1 py-3 rounded-2xl border-2 text-xs font-bold transition-colors ${
+                      selected ? 'border-green bg-green-light text-green' : 'border-border text-sub hover:border-green/30'
+                    }`}
+                  >
+                    <span className="text-lg">{icon}</span>
+                    {label}
+                  </button>
+                )
+              })}
+            </div>
+            <button onClick={handleSavePayment} disabled={savingPayment}
+              className="btn-primary w-full py-2.5 flex items-center justify-center gap-2">
+              {savingPayment ? <RefreshCw size={14} className="animate-spin" /> : <><Save size={14}/> Save</>}
+            </button>
+          </div>
+        ) : paymentMethods.length === 0 ? (
+          <p className="text-xs text-sub">No payment methods set yet — tap Edit to add some.</p>
+        ) : (
+          <div className="flex gap-2 flex-wrap">
+            {PAYMENT_METHODS.filter(m => paymentMethods.includes(m.key)).map(({ key, label, icon }) => (
+              <span key={key} className="flex items-center gap-1.5 bg-green-light text-green text-xs font-bold px-3 py-1.5 rounded-full">
+                {icon} {label}
+              </span>
             ))}
           </div>
         )}

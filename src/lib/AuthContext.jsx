@@ -11,14 +11,20 @@ export function AuthProvider({ children }) {
 
   const fetchProfile = useCallback(async (userId) => {
     if (!userId) { setProfile(null); return }
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('users')
       .select('id, name, email, phone, address, role, status')
       .eq('id', userId)
-      .single()
+      .maybeSingle()
+    if (error) {
+      console.error('[AuthContext] failed to fetch profile:', error)
+      return
+    }
     if (data) {
       setProfile(data)
       try { localStorage.setItem('cc-commuter-profile', JSON.stringify(data)) } catch {}
+    } else {
+      console.warn('[AuthContext] no matching users row for authenticated id:', userId)
     }
   }, [])
 
@@ -30,12 +36,20 @@ export function AuthProvider({ children }) {
         }
         setSession(session ?? null)
         if (session?.user?.id) {
-          // Try cache first
+          // Show cached profile instantly for a fast first paint, but do
+          // NOT mark auth as "loaded" from the cache alone — loadingAuth
+          // only flips once the fresh fetch below actually resolves.
+          // Setting it false here too was the bug: ProtectedRoute gates
+          // rendering purely on loadingAuth, so the app would render
+          // immediately with stale cached data (old status, old role, old
+          // profile fields) and only silently self-correct once the real
+          // fetch landed a moment later — visible as "wrong data on first
+          // login" whenever the cache was out of date.
           try {
             const cached = localStorage.getItem('cc-commuter-profile')
             if (cached) {
               const p = JSON.parse(cached)
-              if (p?.id === session.user.id) { setProfile(p); setLoadingAuth(false) }
+              if (p?.id === session.user.id) setProfile(p)
             }
           } catch {}
           fetchProfile(session.user.id).finally(() => setLoadingAuth(false))
@@ -48,20 +62,14 @@ export function AuthProvider({ children }) {
     return () => subscription.unsubscribe()
   }, [fetchProfile])
 
-  const signIn = useCallback(async (email, password) => {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) throw error
-    // Check role
-    const { data: row } = await supabase
-      .from('users').select('role, status').eq('id', data.user.id).single()
-    if (!row) { await supabase.auth.signOut(); throw new Error('Account not found.') }
-    if (row.role === 'admin') { await supabase.auth.signOut(); throw new Error('Use the Admin Panel to log in as administrator.') }
-    if (row.status === 'suspended') { await supabase.auth.signOut(); throw new Error('Your account has been suspended. Contact the administrator.') }
-    return data
-  }, [])
+  // Registration is split into two steps so the profile row only gets
+  // created AFTER the person actually verifies their email via OTP —
+  // otherwise an unverified signup would already have a fully active
+  // account, defeating the point of requiring verification at all.
 
-  const signUp = useCallback(async (form) => {
-    // 1. Create Supabase Auth user with metadata so we can access it on trigger
+  // Step 1: create the (unconfirmed) auth user — this is what triggers
+  // Supabase to send the verification email. No profile row yet.
+  const startSignUp = useCallback(async (form) => {
     const { data, error } = await supabase.auth.signUp({
       email: form.email,
       password: form.password,
@@ -74,30 +82,47 @@ export function AuthProvider({ children }) {
       }
     })
     if (error) throw error
+    if (!data?.user?.id) throw new Error('Signup failed — no user ID returned.')
+    return data
+  }, [])
+
+  // Step 2: verify the 6-digit code the person received by email. Only
+  // on success do we actually create the users-table profile row — this
+  // is the real enforcement point, not just a UI nicety.
+  const verifySignUpOtp = useCallback(async (form, token) => {
+    const { data, error } = await supabase.auth.verifyOtp({
+      email: form.email,
+      token,
+      type: 'signup',
+    })
+    if (error) throw error
 
     const userId = data?.user?.id
-    if (!userId) throw new Error('Signup failed — no user ID returned.')
+    if (!userId) throw new Error('Verification succeeded but no user ID was returned.')
 
-    // 2. Insert into users table with all form fields
     const { error: rowError } = await supabase.from('users').insert({
-      id:      userId,
-      name:    form.name.trim(),
-      email:   form.email.trim().toLowerCase(),
-      phone:   form.phone?.trim()   || null,
-      address: form.address?.trim() || null,
+      id:          userId,
+      name:        form.name.trim(),
+      email:       form.email.trim().toLowerCase(),
+      phone:       form.phone?.trim()   || null,
+      address:     form.address?.trim() || null,
+      address_lat: form.addressLat ?? null,
+      address_lng: form.addressLng ?? null,
       role:    'customer',
       status:  'active',
     })
 
     // If RLS blocks direct insert, try upsert instead
     if (rowError) {
-      console.warn('[signUp] insert failed, trying upsert:', rowError.message)
+      console.warn('[verifySignUpOtp] insert failed, trying upsert:', rowError.message)
       const { error: upsertError } = await supabase.from('users').upsert({
-        id:      userId,
-        name:    form.name.trim(),
-        email:   form.email.trim().toLowerCase(),
-        phone:   form.phone?.trim()   || null,
-        address: form.address?.trim() || null,
+        id:          userId,
+        name:        form.name.trim(),
+        email:       form.email.trim().toLowerCase(),
+        phone:       form.phone?.trim()   || null,
+        address:     form.address?.trim() || null,
+        address_lat: form.addressLat ?? null,
+        address_lng: form.addressLng ?? null,
         role:    'customer',
         status:  'active',
       })
@@ -105,6 +130,13 @@ export function AuthProvider({ children }) {
     }
 
     return data
+  }, [])
+
+  // Lets the person request a new code if theirs expired or didn't
+  // arrive — Supabase applies its own rate limiting to this internally.
+  const resendSignUpOtp = useCallback(async (email) => {
+    const { error } = await supabase.auth.resend({ type: 'signup', email })
+    if (error) throw error
   }, [])
 
   const signOut = useCallback(async () => {
@@ -122,7 +154,7 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider value={{
       session, profile, setProfile,
       loadingAuth, isLoggedIn, isCustomer, isDriver,
-      signIn, signUp, signOut,
+      startSignUp, verifySignUpOtp, resendSignUpOtp, signOut,
     }}>
       {children}
     </AuthContext.Provider>

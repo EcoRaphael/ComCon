@@ -1,19 +1,42 @@
 // src/components/auth/LoginPage.jsx
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate, Navigate } from 'react-router-dom'
 import { useAuth } from '@/lib/AuthContext'
 import { useToast } from '@/lib/ToastContext'
-import { Eye, EyeOff, UserCircle2, Bike, ArrowLeft, CheckCircle2, Camera, Image, X } from 'lucide-react'
+import { Eye, EyeOff, UserCircle2, Bike, ArrowLeft, CheckCircle2, Camera, Image, X, Mail } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
 import CameraCapture from '@/components/ui/CameraCapture'
+import NominatimAddressPicker from '@/components/ui/NominatimAddressPicker'
+import PhilippinePhoneInput from '@/components/ui/PhilippinePhoneInput'
+import AuthBackground from '@/components/ui/AuthBackground'
 import { supabase } from '@/lib/supabase/client'
+
+// Supabase (and network failures generally) don't always throw a plain
+// Error with a string .message — sometimes it's a GoTrue error shape with
+// .error_description or .msg instead, sometimes it's a raw object, and in
+// rare cases (like a broken custom SMTP response) something malformed
+// enough that err.message itself is an empty object. Rendering that
+// directly produces a useless blank "{}" in the UI — this always finds
+// *something* displayable instead.
+function getErrorMessage(err) {
+  if (!err) return 'Something went wrong. Please try again.'
+  if (typeof err === 'string') return err
+  if (typeof err.message === 'string' && err.message.trim()) return err.message
+  if (typeof err.error_description === 'string' && err.error_description.trim()) return err.error_description
+  if (typeof err.msg === 'string' && err.msg.trim()) return err.msg
+  try {
+    const str = JSON.stringify(err)
+    if (str && str !== '{}') return str
+  } catch {}
+  return 'Something went wrong. Please try again.'
+}
 
 
 // ── Wrong Portal Screen ─────────────────────────────────────────
 function WrongPortalScreen({ wrongRole, onGoCorrect, onBack }) {
   const isDriver = wrongRole === 'driver'
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-dark via-green to-green flex flex-col items-center justify-center p-5">
+    <AuthBackground>
       <div className="w-full max-w-sm">
 
         {/* Card */}
@@ -65,14 +88,14 @@ function WrongPortalScreen({ wrongRole, onGoCorrect, onBack }) {
 
         <p className="text-white/30 text-xs mt-8 text-center">CommuterConnect © 2026 · Calbayog City</p>
       </div>
-    </div>
+    </AuthBackground>
   )
 }
 
 // ── Role Selector Screen ────────────────────────────────────────
 function RoleSelector({ onSelect }) {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-dark via-green to-green flex flex-col items-center justify-center p-5">
+    <AuthBackground>
 
       {/* Brand */}
       <div className="text-center mb-10">
@@ -128,7 +151,7 @@ function RoleSelector({ onSelect }) {
       </div>
 
       <p className="text-white/30 text-xs mt-10">CommuterConnect © 2026 · Calbayog City</p>
-    </div>
+    </AuthBackground>
   )
 }
 
@@ -162,7 +185,7 @@ function Field({ label, type = 'text', placeholder, value, onChange, disabled, a
 
 // ── Commuter Auth Panel ─────────────────────────────────────────
 function CommuterPanel({ onBack, onSwitch }) {
-  const { signIn, signUp } = useAuth()
+  const { startSignUp, verifySignUpOtp, resendSignUpOtp } = useAuth()
   const { toast } = useToast()
   const navigate  = useNavigate()
 
@@ -170,6 +193,12 @@ function CommuterPanel({ onBack, onSwitch }) {
   const [loading,    setLoading]    = useState(false)
   const [error,      setError]      = useState('')
   const [done,       setDone]       = useState(false)
+  // 'form' -> collecting registration details, 'otp' -> awaiting the
+  // 6-digit code just emailed to them
+  const [step,        setStep]        = useState('form')
+  const [otp,         setOtp]         = useState('')
+  const [resending,   setResending]   = useState(false)
+  const [resendCooldown, setResendCooldown] = useState(0)
   const [wrongRole,  setWrongRole]  = useState(() => {
     const v = sessionStorage.getItem('cc-wrong-role-commuter')
     if (v) { sessionStorage.removeItem('cc-wrong-role-commuter'); return v }
@@ -182,9 +211,16 @@ function CommuterPanel({ onBack, onSwitch }) {
   }
 
   const [lf, setLf] = useState({ email: '', password: '' })
-  const [rf, setRf] = useState({ name: '', email: '', phone: '', address: '', password: '', confirm: '' })
+  const [rf, setRf] = useState({ name: '', email: '', phone: '', address: '', addressLat: null, addressLng: null, password: '', confirm: '' })
 
   const accent = 'focus:border-blue-400'
+
+  // Countdown for the resend-code button, so people can't hammer it
+  useEffect(() => {
+    if (resendCooldown <= 0) return
+    const t = setTimeout(() => setResendCooldown(s => s - 1), 1000)
+    return () => clearTimeout(t)
+  }, [resendCooldown])
 
   if (wrongRole) return (
     <WrongPortalScreen
@@ -222,40 +258,121 @@ function CommuterPanel({ onBack, onSwitch }) {
         return
       }
       navigate('/', { replace: true })
-    } catch (err) { setError(err.message) }
+    } catch (err) { setError(getErrorMessage(err)) }
     finally { setLoading(false) }
   }
 
+  // Step 1 of registration: create the (unconfirmed) account, which
+  // triggers Supabase to email a 6-digit code, then move to the OTP step.
   const handleRegister = async (e) => {
     e.preventDefault(); setError('')
     if (!rf.name || !rf.email || !rf.password) { setError('Name, email and password are required.'); return }
+    if (!/^9\d{9}$/.test(rf.phone)) { setError('Enter a valid 10-digit Philippine mobile number (e.g. 9XX XXX XXXX).'); return }
     if (rf.password.length < 8) { setError('Password must be at least 8 characters.'); return }
     if (rf.password !== rf.confirm) { setError('Passwords do not match.'); return }
     setLoading(true)
+    // Normalize to the full +63 format now, once, so every later step
+    // (the signup metadata AND the actual profile row created after OTP
+    // verification) reads the same consistent value from this point on.
+    const formWithFullPhone = { ...rf, phone: '+63' + rf.phone }
+    setRf(formWithFullPhone)
     try {
-      await signUp(rf)
-      setDone(true)
-    } catch (err) { setError(err.message) }
+      await startSignUp(formWithFullPhone)
+      setStep('otp')
+      setResendCooldown(30)
+    } catch (err) { setError(getErrorMessage(err)) }
     finally { setLoading(false) }
   }
 
+  // Step 2: verify the code — the profile row only gets created here,
+  // on success, not back in handleRegister.
+  const handleVerifyOtp = async (e) => {
+    e.preventDefault(); setError('')
+    if (otp.trim().length < 6) { setError('Enter the verification code from your email.'); return }
+    setLoading(true)
+    try {
+      await verifySignUpOtp(rf, otp.trim())
+      setDone(true)
+    } catch (err) { setError(getErrorMessage(err)) }
+    finally { setLoading(false) }
+  }
+
+  const handleResendOtp = async () => {
+    if (resendCooldown > 0) return
+    setResending(true); setError('')
+    try {
+      await resendSignUpOtp(rf.email)
+      toast('A new code has been sent to your email.')
+      setResendCooldown(30)
+    } catch (err) { setError(getErrorMessage(err)) }
+    finally { setResending(false) }
+  }
+
+  if (step === 'otp' && !done) return (
+    <AuthBackground>
+      <div className="w-full max-w-sm bg-white rounded-3xl p-8 shadow-2xl">
+        <div className="text-center mb-5">
+          <Mail size={44} className="text-blue-500 mx-auto mb-3" />
+          <h2 className="text-xl font-black text-navy mb-1">Check Your Email</h2>
+          <p className="text-sub text-sm">
+            We sent a verification code to <span className="font-bold text-navy">{rf.email}</span>
+          </p>
+        </div>
+        <form onSubmit={handleVerifyOtp} className="space-y-3">
+          <input
+            type="text"
+            inputMode="numeric"
+            maxLength={10}
+            placeholder="00000000"
+            value={otp}
+            onChange={e => setOtp(e.target.value.replace(/\D/g, ''))}
+            disabled={loading}
+            className="w-full text-center text-2xl font-black tracking-[0.3em] py-3 border-2 border-border rounded-2xl focus:border-blue-400 outline-none"
+          />
+          {error && <p className="text-red-600 text-xs text-center">{error}</p>}
+          <button
+            type="submit"
+            disabled={loading || otp.length < 6}
+            className="w-full py-3 text-white font-black text-sm uppercase tracking-widest rounded-2xl disabled:opacity-50"
+            style={{ background: 'linear-gradient(135deg, #1565C0, #1976D2)' }}
+          >
+            {loading ? 'Verifying...' : 'Verify & Create Account'}
+          </button>
+        </form>
+        <div className="text-center mt-4 space-y-2">
+          <button
+            onClick={handleResendOtp}
+            disabled={resending || resendCooldown > 0}
+            className="text-xs font-bold text-blue-600 disabled:text-sub disabled:cursor-not-allowed"
+          >
+            {resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : resending ? 'Sending...' : 'Resend code'}
+          </button>
+          <br />
+          <button onClick={() => { setStep('form'); setOtp(''); setError('') }} className="text-xs text-sub">
+            Wrong email? Go back
+          </button>
+        </div>
+      </div>
+    </AuthBackground>
+  )
+
   if (done) return (
-    <div className="min-h-screen bg-gradient-to-br from-green-dark via-green to-green flex flex-col items-center justify-center p-5">
+    <AuthBackground>
       <div className="w-full max-w-sm bg-white rounded-3xl p-8 shadow-2xl text-center">
         <CheckCircle2 size={52} className="text-blue-500 mx-auto mb-4" />
-        <h2 className="text-xl font-black text-navy mb-2">Account Created!</h2>
-        <p className="text-sub text-sm">Check your email <span className="font-bold text-navy">{rf.email}</span> to verify your account, then sign in.</p>
-        <button onClick={() => { setDone(false); setTab('login'); setLf(p => ({ ...p, email: rf.email })) }}
+        <h2 className="text-xl font-black text-navy mb-2">Email Verified!</h2>
+        <p className="text-sub text-sm">Your account is ready, <span className="font-bold text-navy">{rf.name}</span>.</p>
+        <button onClick={() => navigate('/', { replace: true })}
           className="mt-6 w-full py-3 text-white font-black text-sm uppercase tracking-widest rounded-2xl"
           style={{ background: 'linear-gradient(135deg, #1565C0, #1976D2)' }}>
-          Go to Sign In
+          Continue
         </button>
       </div>
-    </div>
+    </AuthBackground>
   )
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-dark via-green to-green flex flex-col items-center justify-center p-5">
+    <AuthBackground>
 
       {/* Header */}
       <div className="w-full max-w-sm mb-6">
@@ -315,11 +432,17 @@ function CommuterPanel({ onBack, onSwitch }) {
               onChange={e => setRf(p => ({ ...p, name: e.target.value }))} disabled={loading} accent={accent} />
             <Field label="Email *" type="email" placeholder="juan@email.com" value={rf.email}
               onChange={e => setRf(p => ({ ...p, email: e.target.value }))} disabled={loading} accent={accent} />
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Phone" placeholder="+63 9XX XXX XXXX" value={rf.phone}
-                onChange={e => setRf(p => ({ ...p, phone: e.target.value }))} disabled={loading} accent={accent} />
-              <Field label="Address" placeholder="Brgy., Calbayog" value={rf.address}
-                onChange={e => setRf(p => ({ ...p, address: e.target.value }))} disabled={loading} accent={accent} />
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-widest text-sub ml-1">Phone *</label>
+              <PhilippinePhoneInput value={rf.phone} onChange={val => setRf(p => ({ ...p, phone: val }))} disabled={loading} />
+            </div>
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-widest text-sub ml-1">Address</label>
+              <NominatimAddressPicker
+                value={{ address: rf.address }}
+                onChange={val => setRf(p => ({ ...p, address: val.address, addressLat: val.lat, addressLng: val.lng }))}
+                disabled={loading}
+              />
             </div>
             <Field label="Password *" type="password" placeholder="Min. 8 characters" value={rf.password}
               onChange={e => setRf(p => ({ ...p, password: e.target.value }))} disabled={loading} accent={accent} />
@@ -337,21 +460,24 @@ function CommuterPanel({ onBack, onSwitch }) {
       </div>
 
       <p className="text-white/30 text-xs mt-8">CommuterConnect © 2026 · Calbayog City</p>
-    </div>
+    </AuthBackground>
   )
 }
 
 // ── Driver Auth Panel ───────────────────────────────────────────
 const VEHICLE_TYPES = ['Tricycle', 'Multicab', 'Timbol']
+const PAYMENT_METHODS = [
+  { key: 'cash',  label: 'Cash',  icon: '💵' },
+  { key: 'gcash', label: 'GCash', icon: '📱' },
+  { key: 'maya',  label: 'Maya',  icon: '💳' },
+]
 
 function DriverPanel({ onBack, onSwitch }) {
-  const { signIn, signUp } = useAuth()
   const navigate  = useNavigate()
 
   const [tab,        setTab]        = useState('login')
   const [loading,    setLoading]    = useState(false)
   const [error,      setError]      = useState('')
-  const [done,       setDone]       = useState(false)
   const [wrongRole,  setWrongRole]  = useState(() => {
     const v = sessionStorage.getItem('cc-wrong-role-driver')
     if (v) { sessionStorage.removeItem('cc-wrong-role-driver'); return v }
@@ -365,21 +491,27 @@ function DriverPanel({ onBack, onSwitch }) {
 
   const [lf, setLf] = useState({ email: '', password: '' })
   const [rf, setRf] = useState({
-    name: '', email: '', phone: '', address: '',
-    vehicleType: '', route: '',
+    name: '', email: '', phone: '', address: '', addressLat: null, addressLng: null,
+    vehicleType: '', route: '', paymentMethods: ['cash'],
     password: '', confirm: ''
   })
 
-  // Document photos — driver's license, OR (Official Receipt), CR
-  // (Certificate of Registration). Each field holds { file, previewUrl }.
-  // Two explicit options are offered per document: an in-app camera
-  // capture (CameraCapture.jsx, using getUserMedia) and a plain gallery
-  // file picker. A single <input type="file" accept="image/*"> that
-  // *hopes* the OS surfaces a camera option isn't reliable — desktop
-  // browsers largely ignore the `capture` attribute, and behavior varies
-  // across mobile browsers/webviews — so "take a photo" needed to be a
-  // real, guaranteed feature rather than something left to chance.
-  const [docs, setDocs] = useState({ license: null, or: null, cr: null })
+  const togglePaymentMethod = (key) => {
+    setRf(prev => ({
+      ...prev,
+      paymentMethods: prev.paymentMethods.includes(key)
+        ? prev.paymentMethods.filter(m => m !== key)
+        : [...prev.paymentMethods, key],
+    }))
+  }
+
+  // Document photos — driver's license (front/back), OR, CR. Uploaded
+  // during registration itself, right after signing the driver in
+  // programmatically (see handleRegister below) — this gives us a real
+  // session to satisfy Storage's RLS-equivalent policies, so admin can
+  // see these documents immediately rather than waiting for the driver
+  // to log in separately later.
+  const [docs, setDocs] = useState({ license_front: null, license_back: null, or: null, cr: null })
   const [cameraFor, setCameraFor] = useState(null) // which doc key the camera modal is open for
   const MAX_DOC_MB = 8
 
@@ -464,7 +596,7 @@ function DriverPanel({ onBack, onSwitch }) {
         return
       }
       navigate('/driver', { replace: true })
-    } catch (err) { setError(err.message) }
+    } catch (err) { setError(getErrorMessage(err)) }
     finally { setLoading(false) }
   }
 
@@ -474,26 +606,25 @@ function DriverPanel({ onBack, onSwitch }) {
       return setError('Name, email, password, and vehicle type are required.')
     if (rf.password.length < 8) return setError('Password must be at least 8 characters.')
     if (rf.password !== rf.confirm) return setError('Passwords do not match.')
-    if (!docs.license || !docs.or || !docs.cr)
-      return setError('Please upload photos of your License, OR, and CR — admin needs these to verify your account.')
+    if (rf.paymentMethods.length === 0)
+      return setError('Select at least one payment method you accept (Cash, GCash, or Maya).')
+    if (!docs.license_front || !docs.license_back || !docs.or || !docs.cr)
+      return setError('Please upload photos of your License (front and back), OR, and CR — admin needs these to review your application.')
     setLoading(true)
     try {
+      // Pass name + role as signup metadata — handle_new_auth_user()
+      // reads this to create the base users row correctly as 'driver'
+      // instead of defaulting to 'customer'. complete_driver_registration
+      // below only fills in what that trigger doesn't (phone, address,
+      // coordinates, plus the drivers row itself).
       const { data: authData, error: signUpError } = await supabase.auth.signUp({
         email: rf.email.trim(),
         password: rf.password,
+        options: { data: { name: rf.name.trim(), role: 'driver' } },
       })
       if (signUpError) throw signUpError
       const userId = authData?.user?.id
       if (!userId) throw new Error('Signup failed — no user ID.')
-
-      const { error: userErr } = await supabase.from('users').upsert({
-        id: userId, name: rf.name.trim(),
-        email: rf.email.trim().toLowerCase(),
-        phone: rf.phone?.trim() || null,
-        address: rf.address?.trim() || null,
-        role: 'driver', status: 'active',
-      })
-      if (userErr) throw userErr
 
       // plate is NOT NULL + UNIQUE in the schema, but we no longer collect
       // it here — admin reads the real plate off the License/OR/CR photos
@@ -504,21 +635,41 @@ function DriverPanel({ onBack, onSwitch }) {
       // displayed until admin fills in the actual one.
       const placeholderPlate = `PENDING-${userId.slice(0, 8).toUpperCase()}`
 
-      const { error: driverErr } = await supabase.from('drivers').insert({
-        user_id: userId, name: rf.name.trim(),
-        plate: placeholderPlate,
-        vehicle_type: rf.vehicleType,
-        route: rf.route?.trim() || '',
-        license_no: '',
-        status: 'inactive', verified: false,
-        rating: 0, trips: 0, earnings: 0,
-        color: '#E84C27',
+      // "Confirm email" (required for commuter OTP) is a project-wide
+      // Supabase setting — signUp() here returns session: null until the
+      // account is confirmed. This RPC runs SECURITY DEFINER (bypasses
+      // RLS server-side) and confirms the email immediately as part of
+      // registration — see driver_registration_rls_fix.sql.
+      const { error: registerErr } = await supabase.rpc('complete_driver_registration', {
+        p_user_id: userId,
+        p_phone: rf.phone?.trim() || null,
+        p_address: rf.address?.trim() || null,
+        p_address_lat: rf.addressLat ?? null,
+        p_address_lng: rf.addressLng ?? null,
+        p_plate: placeholderPlate,
+        p_vehicle_type: rf.vehicleType,
+        p_route: rf.route?.trim() || '',
+        p_payment_methods: rf.paymentMethods,
       })
-      if (driverErr) throw driverErr
+      if (registerErr) throw registerErr
 
-      // Upload the 3 document photos to the driver's own storage folder,
+      // Now that the account is confirmed (thanks to the RPC above), sign
+      // the driver in right here — signUp() itself never gave us a
+      // session since the account wasn't confirmed yet at that moment,
+      // but a fresh sign-in now succeeds and gives us a real one. That's
+      // what lets document uploads to Storage satisfy their RLS-
+      // equivalent policies (which check auth.uid()) within this same
+      // registration flow, so admin can see them immediately instead of
+      // waiting for the driver to log in separately later.
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: rf.email.trim(),
+        password: rf.password,
+      })
+      if (signInError) throw new Error('Account created, but automatic sign-in failed: ' + signInError.message + ' — please try signing in manually.')
+
+      // Upload the 4 document photos to the driver's own storage folder,
       // then record the resulting paths on their drivers row so admin can
-      // pull up signed URLs to review them before verifying.
+      // pull up signed URLs to review them right away.
       const uploadDoc = async (key, file) => {
         const ext = file.name.split('.').pop() || 'jpg'
         const path = `${userId}/${key}.${ext}`
@@ -529,45 +680,38 @@ function DriverPanel({ onBack, onSwitch }) {
         return path
       }
 
-      const [licensePath, orPath, crPath] = await Promise.all([
-        uploadDoc('license', docs.license.file),
+      const [licenseFrontPath, licenseBackPath, orPath, crPath] = await Promise.all([
+        uploadDoc('license_front', docs.license_front.file),
+        uploadDoc('license_back', docs.license_back.file),
         uploadDoc('or', docs.or.file),
         uploadDoc('cr', docs.cr.file),
       ])
 
       const { error: pathErr } = await supabase.from('drivers')
         .update({
-          license_photo_path: licensePath,
+          license_photo_path: licenseFrontPath,
+          license_back_photo_path: licenseBackPath,
           or_photo_path: orPath,
           cr_photo_path: crPath,
         })
         .eq('user_id', userId)
       if (pathErr) throw pathErr
 
-      setDone(true)
-    } catch (err) { setError(err.message) }
+      // Driver is now genuinely logged in (see signInWithPassword above)
+      // with their documents already submitted — send them straight into
+      // the app rather than a separate "application submitted" screen.
+      // DriverDashboard.jsx already shows a clear pending-verification
+      // banner for accounts that aren't verified yet.
+      navigate('/driver', { replace: true })
+    } catch (err) { setError(getErrorMessage(err)) }
     finally { setLoading(false) }
   }
 
   const inputCls = `w-full h-11 px-4 mt-1.5 bg-surface border-2 border-transparent ${accent} rounded-2xl outline-none text-sm font-medium text-navy transition-all`
   const labelCls = "text-[10px] font-bold uppercase tracking-widest text-sub ml-1"
 
-  if (done) return (
-    <div className="min-h-screen bg-gradient-to-br from-green-dark via-green to-green flex flex-col items-center justify-center p-5">
-      <div className="w-full max-w-sm bg-white rounded-3xl p-8 shadow-2xl text-center">
-        <CheckCircle2 size={52} className="text-cta mx-auto mb-4" />
-        <h2 className="text-xl font-black text-navy mb-2">Application Submitted!</h2>
-        <p className="text-sub text-sm leading-relaxed">Your driver registration is pending review by <span className="font-bold text-navy">LTO Calbayog admin</span>, who will confirm your plate and license number from your uploaded documents. You'll be notified once verified.</p>
-        <button onClick={() => { setDone(false); setTab('login'); setLf(p => ({ ...p, email: rf.email })) }}
-          className="mt-6 w-full py-3 text-white font-black text-sm uppercase tracking-widest rounded-2xl bg-cta">
-          Back to Sign In
-        </button>
-      </div>
-    </div>
-  )
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-dark via-green to-green flex flex-col items-center justify-center p-5">
+    <AuthBackground>
 
       {/* Header */}
       <div className="w-full max-w-sm mb-6">
@@ -641,17 +785,18 @@ function DriverPanel({ onBack, onSwitch }) {
               <input type="email" className={inputCls} placeholder="driver@email.com"
                 value={rf.email} onChange={e => setRf(p => ({ ...p, email: e.target.value }))} disabled={loading} />
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className={labelCls}>Phone</label>
-                <input className={inputCls} placeholder="09XX XXX XXXX"
-                  value={rf.phone} onChange={e => setRf(p => ({ ...p, phone: e.target.value }))} disabled={loading} />
-              </div>
-              <div>
-                <label className={labelCls}>Address</label>
-                <input className={inputCls} placeholder="Brgy., Calbayog"
-                  value={rf.address} onChange={e => setRf(p => ({ ...p, address: e.target.value }))} disabled={loading} />
-              </div>
+            <div>
+              <label className={labelCls}>Phone</label>
+              <input className={inputCls} placeholder="09XX XXX XXXX"
+                value={rf.phone} onChange={e => setRf(p => ({ ...p, phone: e.target.value }))} disabled={loading} />
+            </div>
+            <div>
+              <label className={labelCls}>Address</label>
+              <NominatimAddressPicker
+                value={{ address: rf.address }}
+                onChange={val => setRf(p => ({ ...p, address: val.address, addressLat: val.lat, addressLng: val.lng }))}
+                disabled={loading}
+              />
             </div>
 
             <p className="text-[10px] font-black uppercase tracking-widest text-cta border-b border-orange-100 pb-1 pt-1">Vehicle Info</p>
@@ -672,14 +817,41 @@ function DriverPanel({ onBack, onSwitch }) {
                 value={rf.route} onChange={e => setRf(p => ({ ...p, route: e.target.value }))} disabled={loading} />
             </div>
 
+            <p className="text-[10px] font-black uppercase tracking-widest text-cta border-b border-orange-100 pb-1 pt-1">Payment Methods</p>
+            <p className="text-[11px] text-sub -mt-1">
+              Select every method you accept — commuters will see this before booking with you. At least one is required.
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {PAYMENT_METHODS.map(({ key, label, icon }) => {
+                const selected = rf.paymentMethods.includes(key)
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => togglePaymentMethod(key)}
+                    disabled={loading}
+                    className={`flex flex-col items-center gap-1 py-3 rounded-2xl border-2 text-xs font-bold transition-colors ${
+                      selected
+                        ? 'border-cta bg-orange-50 text-cta'
+                        : 'border-border text-sub hover:border-orange-200'
+                    }`}
+                  >
+                    <span className="text-lg">{icon}</span>
+                    {label}
+                  </button>
+                )
+              })}
+            </div>
+
             <p className="text-[10px] font-black uppercase tracking-widest text-cta border-b border-orange-100 pb-1 pt-1">Verification Documents</p>
             <p className="text-[11px] text-sub -mt-1">
               Take a photo or upload from your gallery — admin reviews these before approving your account.
             </p>
             {[
-              { key: 'license', label: "Driver's License *" },
-              { key: 'or',      label: 'OR (Official Receipt) *' },
-              { key: 'cr',      label: 'CR (Certificate of Registration) *' },
+              { key: 'license_front', label: "Driver's License — Front *" },
+              { key: 'license_back',  label: "Driver's License — Back *" },
+              { key: 'or',            label: 'OR (Official Receipt) *' },
+              { key: 'cr',            label: 'CR (Certificate of Registration) *' },
             ].map(({ key, label }) => (
               <div key={key}>
                 <label className={labelCls}>{label}</label>
@@ -742,7 +914,6 @@ function DriverPanel({ onBack, onSwitch }) {
       </div>
 
       <p className="text-white/30 text-xs mt-8">CommuterConnect © 2026 · Calbayog City</p>
-
       {cameraFor && (
         <CameraCapture
           onCapture={handleCameraCapture}
@@ -758,10 +929,10 @@ function DriverPanel({ onBack, onSwitch }) {
         onChange={e => {
           const key = e.target.dataset.forKey
           handleDocSelect(key, e.target.files?.[0])
-          e.target.value = '' // reset so selecting the same file again still fires onChange
+          e.target.value = ''
         }}
       />
-    </div>
+    </AuthBackground>
   )
 }
 

@@ -8,6 +8,9 @@ import {
   Navigation, History, User, ArrowRight, ChevronRight
 } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
+import RideMap from '@/components/ui/RideMap'
+import UserAvatar from '@/components/ui/UserAvatar'
+import PaymentMethodBadges from '@/components/ui/PaymentMethodBadges'
 
 const VEHICLE_ICONS  = { Tricycle: Car, Timbol: Bus, Multicab: Bus }
 const VEHICLE_COLORS = {
@@ -50,7 +53,7 @@ export default function Home() {
     setLoading(true)
     const [bookingsRes, fareRes] = await Promise.all([
       supabase.from('bookings')
-        .select('*, drivers!driver_id(name, plate, vehicle_type, rating, color)')
+        .select('*, drivers!driver_id(name, plate, vehicle_type, rating, color, user_id, payment_methods)')
         .eq('customer_id', profile.id)
         .order('created_at', { ascending: false })
         .limit(10),
@@ -79,9 +82,8 @@ export default function Home() {
               {firstName}! 👋
             </h2>
           </div>
-          <button onClick={() => navigate('/profile')}
-            className="w-11 h-11 rounded-full bg-white/20 border-2 border-white/30 flex items-center justify-center text-white font-black text-sm">
-            {profile?.name?.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase() || 'CC'}
+          <button onClick={() => navigate('/profile')}>
+            <UserAvatar userId={profile?.id} name={profile?.name} size={44} color="rgba(255,255,255,0.25)" className="border-2 border-white/30" />
           </button>
         </div>
 
@@ -128,21 +130,29 @@ export default function Home() {
                   ₱{Number(activeBooking.fare||0).toFixed(2)}
                 </p>
               </div>
+
+              {/* Pickup → dropoff preview map (static, not live-tracked yet) */}
+              <RideMap pickup={activeBooking.pickup} dropoff={activeBooking.dropoff} height={130} className="mb-3" />
               {/* Driver info */}
               {activeBooking.drivers && (
-                <div className="flex items-center gap-2.5 bg-surface rounded-xl p-2.5">
-                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-black flex-shrink-0"
-                    style={{ background: activeBooking.drivers.color || '#2E7D32' }}>
-                    {activeBooking.drivers.name?.split(' ').map(w=>w[0]).join('').slice(0,2)}
+                <div className="bg-surface rounded-xl p-2.5 space-y-2">
+                  <div className="flex items-center gap-2.5">
+                    <UserAvatar
+                      userId={activeBooking.drivers.user_id}
+                      name={activeBooking.drivers.name}
+                      color={activeBooking.drivers.color || '#2E7D32'}
+                      size={32}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-navy truncate">{activeBooking.drivers.name}</p>
+                      <p className="text-[10px] text-sub">{activeBooking.drivers.plate} · {activeBooking.drivers.vehicle_type}</p>
+                    </div>
+                    <div className="flex items-center gap-0.5 text-amber-500 text-xs font-bold flex-shrink-0">
+                      <Star size={11} fill="currentColor" />
+                      {Number(activeBooking.drivers.rating||0).toFixed(1)}
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-bold text-navy truncate">{activeBooking.drivers.name}</p>
-                    <p className="text-[10px] text-sub">{activeBooking.drivers.plate} · {activeBooking.drivers.vehicle_type}</p>
-                  </div>
-                  <div className="flex items-center gap-0.5 text-amber-500 text-xs font-bold flex-shrink-0">
-                    <Star size={11} fill="currentColor" />
-                    {Number(activeBooking.drivers.rating||0).toFixed(1)}
-                  </div>
+                  <PaymentMethodBadges methods={activeBooking.drivers.payment_methods} />
                 </div>
               )}
             </div>
