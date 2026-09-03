@@ -29,6 +29,18 @@ export default function DriverDashboard() {
       }, payload => {
         if (payload.new.driver_id === driver?.id) {
           setPendingBookings(prev => [payload.new, ...prev])
+          // The "Pending Requests" card's visibility AND its displayed
+          // count both come from stats.pending, not from
+          // pendingBookings.length — that was only ever set once, inside
+          // fetchData(). Without updating it here too, a driver whose
+          // dashboard loaded with zero pending bookings would never see
+          // the card appear for a new one arriving live: the toast would
+          // fire, but the actual UI wouldn't change.
+          setStats(prev => ({
+            ...prev,
+            pending: prev.pending + 1,
+            total: prev.total + 1,
+          }))
           toast('🔔 New booking request!')
         }
       })
