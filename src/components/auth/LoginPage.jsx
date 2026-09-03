@@ -36,8 +36,11 @@ function WrongPortalScreen({ wrongRole, onGoCorrect, onBack }) {
   const isDriver = wrongRole === 'driver'
   return (
     <AuthBackground>
-      <div className="w-full max-w-sm">
-        {/* Overlay */}
+      <div
+      className="min-h-screen flex items-center justify-center p-5 relative bg-cover bg-center bg-green-dark"
+      style={{ backgroundImage: `url(${BackgroundImage})` }}
+    >
+      {/* Overlay */}
       <div className="absolute inset-0 bg-black/60 backdrop-blur-[1px] pointer-events-none" />
 
         {/* Card */}
