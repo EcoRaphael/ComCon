@@ -31,6 +31,9 @@ function getErrorMessage(err) {
   return 'Something went wrong. Please try again.'
 }
 
+{/* Overlay */}
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-[1px] pointer-events-none" />
+
 
 // ── Wrong Portal Screen ─────────────────────────────────────────
 function WrongPortalScreen({ wrongRole, onGoCorrect, onBack }) {
