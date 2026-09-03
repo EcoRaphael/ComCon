@@ -41,9 +41,14 @@ export default function DriverProfile() {
       .from('drivers')
       .select('payment_methods')
       .eq('user_id', profile.id)
-      .single()
-      .then(({ data }) => {
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (error) console.error('[DriverProfile] failed to fetch payment methods:', error)
         setPaymentMethods(data?.payment_methods || [])
+        setLoadingPayment(false)
+      })
+      .catch((err) => {
+        console.error('[DriverProfile] unexpected error fetching payment methods:', err)
         setLoadingPayment(false)
       })
   }, [profile?.id])

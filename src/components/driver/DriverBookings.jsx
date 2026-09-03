@@ -44,10 +44,16 @@ export default function DriverBookings() {
   }, [driver?.id])
 
   async function fetchDriver() {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('drivers').select('id, name, plate, vehicle_type')
-      .eq('user_id', profile.id).single()
+      .eq('user_id', profile.id).maybeSingle()
+    if (error) {
+      console.error('[DriverBookings] failed to fetch driver record:', error)
+      setLoading(false)
+      return
+    }
     setDriver(data)
+    if (!data) setLoading(false) // no driver row — nothing to load bookings for
   }
 
   async function fetchBookings() {

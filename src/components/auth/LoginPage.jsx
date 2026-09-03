@@ -185,7 +185,7 @@ function Field({ label, type = 'text', placeholder, value, onChange, disabled, a
 
 // ── Commuter Auth Panel ─────────────────────────────────────────
 function CommuterPanel({ onBack, onSwitch }) {
-  const { signIn, startSignUp, verifySignUpOtp, resendSignUpOtp } = useAuth()
+  const { startSignUp, verifySignUpOtp, resendSignUpOtp } = useAuth()
   const { toast } = useToast()
   const navigate  = useNavigate()
 
@@ -473,7 +473,6 @@ const PAYMENT_METHODS = [
 ]
 
 function DriverPanel({ onBack, onSwitch }) {
-  const { signIn, signUp } = useAuth()
   const navigate  = useNavigate()
 
   const [tab,        setTab]        = useState('login')

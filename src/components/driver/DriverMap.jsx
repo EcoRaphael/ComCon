@@ -17,8 +17,14 @@ export default function DriverMap() {
 
   async function fetchActiveJob() {
     setLoading(true)
-    const { data: driver } = await supabase
-      .from('drivers').select('id').eq('user_id', profile.id).single()
+    const { data: driver, error } = await supabase
+      .from('drivers').select('id').eq('user_id', profile.id).maybeSingle()
+
+    if (error) {
+      console.error('[DriverMap] failed to fetch driver record:', error)
+      setLoading(false)
+      return
+    }
 
     if (driver?.id) {
       const { data } = await supabase
