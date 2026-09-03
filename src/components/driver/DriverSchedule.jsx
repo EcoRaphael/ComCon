@@ -27,19 +27,43 @@ export default function DriverSchedule() {
     fetchData()
   }, [profile?.id])
 
+  // Realtime — the driver's own schedule rows. Without this, a schedule
+  // created via admin's "Auto-Generate Schedules" (or any manual edit)
+  // only ever showed up here after a manual page refresh.
+  useEffect(() => {
+    if (!driver?.id) return
+    const ch = supabase
+      .channel('driver-own-schedule')
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'schedules',
+        filter: `driver_id=eq.${driver.id}`,
+      }, () => fetchSchedules(driver.id))
+      .subscribe()
+    return () => supabase.removeChannel(ch)
+  }, [driver?.id])
+
+  async function fetchSchedules(driverId) {
+    const { data } = await supabase
+      .from('schedules').select('*')
+      .eq('driver_id', driverId)
+      .order('day_of_week')
+    setSchedules(data || [])
+  }
+
   async function fetchData() {
     setLoading(true)
-    const { data: d } = await supabase
+    const { data: d, error } = await supabase
       .from('drivers').select('id, name, vehicle_type, plate, route')
-      .eq('user_id', profile.id).single()
+      .eq('user_id', profile.id).maybeSingle()
+    if (error) {
+      console.error('[DriverSchedule] failed to fetch driver record:', error)
+      setLoading(false)
+      return
+    }
     if (!d) { setLoading(false); return }
     setDriver(d)
 
-    const { data } = await supabase
-      .from('schedules').select('*')
-      .eq('driver_id', d.id)
-      .order('day_of_week')
-    setSchedules(data || [])
+    await fetchSchedules(d.id)
     setLoading(false)
   }
 
