@@ -31,13 +31,14 @@ function getErrorMessage(err) {
   return 'Something went wrong. Please try again.'
 }
 
-
 // ── Wrong Portal Screen ─────────────────────────────────────────
 function WrongPortalScreen({ wrongRole, onGoCorrect, onBack }) {
   const isDriver = wrongRole === 'driver'
   return (
     <AuthBackground>
       <div className="w-full max-w-sm">
+        {/* Overlay */}
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-[1px] pointer-events-none" />
 
         {/* Card */}
         <div className="bg-white rounded-3xl p-8 shadow-2xl text-center">
