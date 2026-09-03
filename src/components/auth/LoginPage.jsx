@@ -7,6 +7,7 @@ import { Eye, EyeOff, UserCircle2, Bike, ArrowLeft, CheckCircle2, Camera, Image,
 import Spinner from '@/components/ui/Spinner'
 import CameraCapture from '@/components/ui/CameraCapture'
 import NominatimAddressPicker from '@/components/ui/NominatimAddressPicker'
+import PhilippinePhoneInput from '@/components/ui/PhilippinePhoneInput'
 import { supabase } from '@/lib/supabase/client'
 
 // Supabase (and network failures generally) don't always throw a plain
@@ -265,11 +266,17 @@ function CommuterPanel({ onBack, onSwitch }) {
   const handleRegister = async (e) => {
     e.preventDefault(); setError('')
     if (!rf.name || !rf.email || !rf.password) { setError('Name, email and password are required.'); return }
+    if (!/^9\d{9}$/.test(rf.phone)) { setError('Enter a valid 10-digit Philippine mobile number (e.g. 9XX XXX XXXX).'); return }
     if (rf.password.length < 8) { setError('Password must be at least 8 characters.'); return }
     if (rf.password !== rf.confirm) { setError('Passwords do not match.'); return }
     setLoading(true)
+    // Normalize to the full +63 format now, once, so every later step
+    // (the signup metadata AND the actual profile row created after OTP
+    // verification) reads the same consistent value from this point on.
+    const formWithFullPhone = { ...rf, phone: '+63' + rf.phone }
+    setRf(formWithFullPhone)
     try {
-      await startSignUp(rf)
+      await startSignUp(formWithFullPhone)
       setStep('otp')
       setResendCooldown(30)
     } catch (err) { setError(getErrorMessage(err)) }
@@ -424,8 +431,10 @@ function CommuterPanel({ onBack, onSwitch }) {
               onChange={e => setRf(p => ({ ...p, name: e.target.value }))} disabled={loading} accent={accent} />
             <Field label="Email *" type="email" placeholder="juan@email.com" value={rf.email}
               onChange={e => setRf(p => ({ ...p, email: e.target.value }))} disabled={loading} accent={accent} />
-            <Field label="Phone" placeholder="+63 9XX XXX XXXX" value={rf.phone}
-              onChange={e => setRf(p => ({ ...p, phone: e.target.value }))} disabled={loading} accent={accent} />
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-widest text-sub ml-1">Phone *</label>
+              <PhilippinePhoneInput value={rf.phone} onChange={val => setRf(p => ({ ...p, phone: val }))} disabled={loading} />
+            </div>
             <div>
               <label className="text-[10px] font-bold uppercase tracking-widest text-sub ml-1">Address</label>
               <NominatimAddressPicker
