@@ -8,6 +8,7 @@ import Spinner from '@/components/ui/Spinner'
 import CameraCapture from '@/components/ui/CameraCapture'
 import NominatimAddressPicker from '@/components/ui/NominatimAddressPicker'
 import PhilippinePhoneInput from '@/components/ui/PhilippinePhoneInput'
+import AuthBackground from '@/components/ui/AuthBackground'
 import { supabase } from '@/lib/supabase/client'
 
 // Supabase (and network failures generally) don't always throw a plain
@@ -35,7 +36,7 @@ function getErrorMessage(err) {
 function WrongPortalScreen({ wrongRole, onGoCorrect, onBack }) {
   const isDriver = wrongRole === 'driver'
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-dark via-green to-green flex flex-col items-center justify-center p-5">
+    <AuthBackground>
       <div className="w-full max-w-sm">
 
         {/* Card */}
@@ -87,14 +88,14 @@ function WrongPortalScreen({ wrongRole, onGoCorrect, onBack }) {
 
         <p className="text-white/30 text-xs mt-8 text-center">CommuterConnect © 2026 · Calbayog City</p>
       </div>
-    </div>
+    </AuthBackground>
   )
 }
 
 // ── Role Selector Screen ────────────────────────────────────────
 function RoleSelector({ onSelect }) {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-dark via-green to-green flex flex-col items-center justify-center p-5">
+    <AuthBackground>
 
       {/* Brand */}
       <div className="text-center mb-10">
@@ -150,7 +151,7 @@ function RoleSelector({ onSelect }) {
       </div>
 
       <p className="text-white/30 text-xs mt-10">CommuterConnect © 2026 · Calbayog City</p>
-    </div>
+    </AuthBackground>
   )
 }
 
@@ -308,7 +309,7 @@ function CommuterPanel({ onBack, onSwitch }) {
   }
 
   if (step === 'otp' && !done) return (
-    <div className="min-h-screen bg-gradient-to-br from-green-dark via-green to-green flex flex-col items-center justify-center p-5">
+    <AuthBackground>
       <div className="w-full max-w-sm bg-white rounded-3xl p-8 shadow-2xl">
         <div className="text-center mb-5">
           <Mail size={44} className="text-blue-500 mx-auto mb-3" />
@@ -352,11 +353,11 @@ function CommuterPanel({ onBack, onSwitch }) {
           </button>
         </div>
       </div>
-    </div>
+    </AuthBackground>
   )
 
   if (done) return (
-    <div className="min-h-screen bg-gradient-to-br from-green-dark via-green to-green flex flex-col items-center justify-center p-5">
+    <AuthBackground>
       <div className="w-full max-w-sm bg-white rounded-3xl p-8 shadow-2xl text-center">
         <CheckCircle2 size={52} className="text-blue-500 mx-auto mb-4" />
         <h2 className="text-xl font-black text-navy mb-2">Email Verified!</h2>
@@ -367,11 +368,11 @@ function CommuterPanel({ onBack, onSwitch }) {
           Continue
         </button>
       </div>
-    </div>
+    </AuthBackground>
   )
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-dark via-green to-green flex flex-col items-center justify-center p-5">
+    <AuthBackground>
 
       {/* Header */}
       <div className="w-full max-w-sm mb-6">
@@ -459,7 +460,7 @@ function CommuterPanel({ onBack, onSwitch }) {
       </div>
 
       <p className="text-white/30 text-xs mt-8">CommuterConnect © 2026 · Calbayog City</p>
-    </div>
+    </AuthBackground>
   )
 }
 
@@ -696,7 +697,7 @@ function DriverPanel({ onBack, onSwitch }) {
   const labelCls = "text-[10px] font-bold uppercase tracking-widest text-sub ml-1"
 
   if (done) return (
-    <div className="min-h-screen bg-gradient-to-br from-green-dark via-green to-green flex flex-col items-center justify-center p-5">
+    <AuthBackground>
       <div className="w-full max-w-sm bg-white rounded-3xl p-8 shadow-2xl text-center">
         <CheckCircle2 size={52} className="text-cta mx-auto mb-4" />
         <h2 className="text-xl font-black text-navy mb-2">Application Submitted!</h2>
@@ -706,11 +707,11 @@ function DriverPanel({ onBack, onSwitch }) {
           Back to Sign In
         </button>
       </div>
-    </div>
+    </AuthBackground>
   )
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-dark via-green to-green flex flex-col items-center justify-center p-5">
+    <AuthBackground>
 
       {/* Header */}
       <div className="w-full max-w-sm mb-6">
@@ -932,7 +933,7 @@ function DriverPanel({ onBack, onSwitch }) {
           e.target.value = '' // reset so selecting the same file again still fires onChange
         }}
       />
-    </div>
+    </AuthBackground>
   )
 }
 
