@@ -3,8 +3,9 @@ import { useState, useRef, useEffect } from 'react'
 import { useNavigate, Navigate } from 'react-router-dom'
 import { useAuth } from '@/lib/AuthContext'
 import { useToast } from '@/lib/ToastContext'
-import { Eye, EyeOff, UserCircle2, Bike, ArrowLeft, CheckCircle2, X, Mail } from 'lucide-react'
+import { Eye, EyeOff, UserCircle2, Bike, ArrowLeft, CheckCircle2, Camera, Image, X, Mail } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
+import CameraCapture from '@/components/ui/CameraCapture'
 import NominatimAddressPicker from '@/components/ui/NominatimAddressPicker'
 import PhilippinePhoneInput from '@/components/ui/PhilippinePhoneInput'
 import AuthBackground from '@/components/ui/AuthBackground'
@@ -478,7 +479,6 @@ function DriverPanel({ onBack, onSwitch }) {
   const [tab,        setTab]        = useState('login')
   const [loading,    setLoading]    = useState(false)
   const [error,      setError]      = useState('')
-  const [done,       setDone]       = useState(false)
   const [wrongRole,  setWrongRole]  = useState(() => {
     const v = sessionStorage.getItem('cc-wrong-role-driver')
     if (v) { sessionStorage.removeItem('cc-wrong-role-driver'); return v }
@@ -506,9 +506,65 @@ function DriverPanel({ onBack, onSwitch }) {
     }))
   }
 
-  // Document upload (License/OR/CR) no longer happens during
-  // registration — see DriverDocumentUpload.jsx, shown after first login
-  // instead, once the driver actually has a session.
+  // Document photos — driver's license (front/back), OR, CR. Uploaded
+  // during registration itself, right after signing the driver in
+  // programmatically (see handleRegister below) — this gives us a real
+  // session to satisfy Storage's RLS-equivalent policies, so admin can
+  // see these documents immediately rather than waiting for the driver
+  // to log in separately later.
+  const [docs, setDocs] = useState({ license_front: null, license_back: null, or: null, cr: null })
+  const [cameraFor, setCameraFor] = useState(null) // which doc key the camera modal is open for
+  const MAX_DOC_MB = 8
+
+  const setDoc = (key, file, previewUrl) => {
+    setError('')
+    setDocs(prev => {
+      if (prev[key]?.previewUrl) URL.revokeObjectURL(prev[key].previewUrl)
+      return { ...prev, [key]: { file, previewUrl } }
+    })
+  }
+
+  const handleDocSelect = (key, file) => {
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setError('Please upload an image file (JPG or PNG).')
+      return
+    }
+    if (file.size > MAX_DOC_MB * 1024 * 1024) {
+      setError(`That image is too large — please keep it under ${MAX_DOC_MB}MB.`)
+      return
+    }
+    setDoc(key, file, URL.createObjectURL(file))
+  }
+
+  const handleCameraCapture = (file, previewUrl) => {
+    setDoc(cameraFor, file, previewUrl)
+    setCameraFor(null)
+  }
+
+  // If getUserMedia fails (permission denied, no camera, etc.), the
+  // camera modal offers "choose from gallery instead" — this triggers a
+  // shared hidden file input for whichever doc key the camera was open
+  // for, captured via closure at the moment the modal was opened.
+  const galleryFallbackRef = useRef(null)
+  const handleFallbackToGallery = () => {
+    const key = cameraFor
+    setTimeout(() => {
+      const input = galleryFallbackRef.current
+      if (input) {
+        input.dataset.forKey = key
+        input.click()
+      }
+    }, 50)
+  }
+
+  const clearDoc = (key) => {
+    setDocs(prev => {
+      if (prev[key]?.previewUrl) URL.revokeObjectURL(prev[key].previewUrl)
+      return { ...prev, [key]: null }
+    })
+  }
+
   const accent = 'focus:border-orange-400'
 
   if (wrongRole) return (
@@ -553,6 +609,8 @@ function DriverPanel({ onBack, onSwitch }) {
     if (rf.password !== rf.confirm) return setError('Passwords do not match.')
     if (rf.paymentMethods.length === 0)
       return setError('Select at least one payment method you accept (Cash, GCash, or Maya).')
+    if (!docs.license_front || !docs.license_back || !docs.or || !docs.cr)
+      return setError('Please upload photos of your License (front and back), OR, and CR — admin needs these to review your application.')
     setLoading(true)
     try {
       // Pass name + role as signup metadata — handle_new_auth_user()
@@ -579,14 +637,10 @@ function DriverPanel({ onBack, onSwitch }) {
       const placeholderPlate = `PENDING-${userId.slice(0, 8).toUpperCase()}`
 
       // "Confirm email" (required for commuter OTP) is a project-wide
-      // Supabase setting — signUp() here returns session: null until
-      // admin confirms this account (folded into their existing "Verify
-      // Driver" click — see AdminContext.jsx). With no active session,
-      // direct client-side table writes fail RLS entirely. This RPC runs
-      // SECURITY DEFINER (bypasses RLS server-side), so it succeeds
-      // regardless of session state — only document upload needs to wait
-      // for a real session, which is why that now happens after first
-      // login instead (see DriverDocumentUpload.jsx).
+      // Supabase setting — signUp() here returns session: null until the
+      // account is confirmed. This RPC runs SECURITY DEFINER (bypasses
+      // RLS server-side) and confirms the email immediately as part of
+      // registration — see driver_registration_rls_fix.sql.
       const { error: registerErr } = await supabase.rpc('complete_driver_registration', {
         p_user_id: userId,
         p_phone: rf.phone?.trim() || null,
@@ -600,27 +654,62 @@ function DriverPanel({ onBack, onSwitch }) {
       })
       if (registerErr) throw registerErr
 
-      setDone(true)
+      // Now that the account is confirmed (thanks to the RPC above), sign
+      // the driver in right here — signUp() itself never gave us a
+      // session since the account wasn't confirmed yet at that moment,
+      // but a fresh sign-in now succeeds and gives us a real one. That's
+      // what lets document uploads to Storage satisfy their RLS-
+      // equivalent policies (which check auth.uid()) within this same
+      // registration flow, so admin can see them immediately instead of
+      // waiting for the driver to log in separately later.
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: rf.email.trim(),
+        password: rf.password,
+      })
+      if (signInError) throw new Error('Account created, but automatic sign-in failed: ' + signInError.message + ' — please try signing in manually.')
+
+      // Upload the 4 document photos to the driver's own storage folder,
+      // then record the resulting paths on their drivers row so admin can
+      // pull up signed URLs to review them right away.
+      const uploadDoc = async (key, file) => {
+        const ext = file.name.split('.').pop() || 'jpg'
+        const path = `${userId}/${key}.${ext}`
+        const { error: uploadErr } = await supabase.storage
+          .from('driver-documents')
+          .upload(path, file, { upsert: true, contentType: file.type })
+        if (uploadErr) throw new Error(`Failed to upload ${key.toUpperCase()} photo: ${uploadErr.message}`)
+        return path
+      }
+
+      const [licenseFrontPath, licenseBackPath, orPath, crPath] = await Promise.all([
+        uploadDoc('license_front', docs.license_front.file),
+        uploadDoc('license_back', docs.license_back.file),
+        uploadDoc('or', docs.or.file),
+        uploadDoc('cr', docs.cr.file),
+      ])
+
+      const { error: pathErr } = await supabase.from('drivers')
+        .update({
+          license_photo_path: licenseFrontPath,
+          license_back_photo_path: licenseBackPath,
+          or_photo_path: orPath,
+          cr_photo_path: crPath,
+        })
+        .eq('user_id', userId)
+      if (pathErr) throw pathErr
+
+      // Driver is now genuinely logged in (see signInWithPassword above)
+      // with their documents already submitted — send them straight into
+      // the app rather than a separate "application submitted" screen.
+      // DriverDashboard.jsx already shows a clear pending-verification
+      // banner for accounts that aren't verified yet.
+      navigate('/driver', { replace: true })
     } catch (err) { setError(getErrorMessage(err)) }
     finally { setLoading(false) }
   }
 
   const inputCls = `w-full h-11 px-4 mt-1.5 bg-surface border-2 border-transparent ${accent} rounded-2xl outline-none text-sm font-medium text-navy transition-all`
   const labelCls = "text-[10px] font-bold uppercase tracking-widest text-sub ml-1"
-
-  if (done) return (
-    <AuthBackground>
-      <div className="w-full max-w-sm bg-white rounded-3xl p-8 shadow-2xl text-center">
-        <CheckCircle2 size={52} className="text-cta mx-auto mb-4" />
-        <h2 className="text-xl font-black text-navy mb-2">Application Submitted!</h2>
-        <p className="text-sub text-sm leading-relaxed">Your account has been created. LTO Calbayog admin needs to confirm it before you can sign in — once they do, log in and you'll be asked to upload your License, OR, and CR for review.</p>
-        <button onClick={() => { setDone(false); setTab('login'); setLf(p => ({ ...p, email: rf.email })) }}
-          className="mt-6 w-full py-3 text-white font-black text-sm uppercase tracking-widest rounded-2xl bg-cta">
-          Back to Sign In
-        </button>
-      </div>
-    </AuthBackground>
-  )
 
   return (
     <AuthBackground>
@@ -755,6 +844,54 @@ function DriverPanel({ onBack, onSwitch }) {
               })}
             </div>
 
+            <p className="text-[10px] font-black uppercase tracking-widest text-cta border-b border-orange-100 pb-1 pt-1">Verification Documents</p>
+            <p className="text-[11px] text-sub -mt-1">
+              Take a photo or upload from your gallery — admin reviews these before approving your account.
+            </p>
+            {[
+              { key: 'license_front', label: "Driver's License — Front *" },
+              { key: 'license_back',  label: "Driver's License — Back *" },
+              { key: 'or',            label: 'OR (Official Receipt) *' },
+              { key: 'cr',            label: 'CR (Certificate of Registration) *' },
+            ].map(({ key, label }) => (
+              <div key={key}>
+                <label className={labelCls}>{label}</label>
+                {docs[key] ? (
+                  <div className="mt-1.5 flex items-center gap-3 bg-surface rounded-2xl p-2.5">
+                    <img src={docs[key].previewUrl} alt={label} className="w-14 h-14 rounded-xl object-cover flex-shrink-0" />
+                    <p className="flex-1 text-xs font-semibold text-navy truncate">{docs[key].file.name}</p>
+                    <button type="button" onClick={() => clearDoc(key)} disabled={loading}
+                      className="p-1.5 text-sub hover:text-red-600 flex-shrink-0">
+                      <X size={16} />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="mt-1.5 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCameraFor(key)}
+                      disabled={loading}
+                      className="flex items-center justify-center gap-2 h-16 border-2 border-dashed border-border rounded-2xl text-sub text-xs font-bold hover:border-orange-300 hover:text-cta transition-colors"
+                    >
+                      <Camera size={16} />
+                      Take Photo
+                    </button>
+                    <label className="flex items-center justify-center gap-2 h-16 border-2 border-dashed border-border rounded-2xl text-sub text-xs font-bold cursor-pointer hover:border-orange-300 hover:text-cta transition-colors">
+                      <Image size={16} />
+                      Gallery
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        disabled={loading}
+                        onChange={e => handleDocSelect(key, e.target.files?.[0])}
+                      />
+                    </label>
+                  </div>
+                )}
+              </div>
+            ))}
+
             <p className="text-[10px] font-black uppercase tracking-widest text-cta border-b border-orange-100 pb-1 pt-1">Account</p>
             <div>
               <label className={labelCls}>Password * (min. 8 chars)</label>
@@ -778,6 +915,24 @@ function DriverPanel({ onBack, onSwitch }) {
       </div>
 
       <p className="text-white/30 text-xs mt-8">CommuterConnect © 2026 · Calbayog City</p>
+      {cameraFor && (
+        <CameraCapture
+          onCapture={handleCameraCapture}
+          onClose={() => setCameraFor(null)}
+          onFallbackToGallery={handleFallbackToGallery}
+        />
+      )}
+      <input
+        ref={galleryFallbackRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={e => {
+          const key = e.target.dataset.forKey
+          handleDocSelect(key, e.target.files?.[0])
+          e.target.value = ''
+        }}
+      />
     </AuthBackground>
   )
 }
