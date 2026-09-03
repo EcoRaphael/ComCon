@@ -9,7 +9,7 @@ export default function AuthBackground({ children, className = '' }) {
   return (
     <div
       className={`min-h-screen flex flex-col items-center justify-center p-5 relative bg-cover bg-center ${className}`}
-      style={{ backgroundImage: "url('/images/calbayog-cathedral.jpg')" }}
+      style={{ backgroundImage: "url('/calbayog-cathedral.jpg')" }}
     >
       {/* Dark overlay so white text/cards stay readable over the photo */}
       <div className="absolute inset-0 bg-black/65" />
