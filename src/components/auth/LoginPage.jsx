@@ -3,9 +3,8 @@ import { useState, useRef, useEffect } from 'react'
 import { useNavigate, Navigate } from 'react-router-dom'
 import { useAuth } from '@/lib/AuthContext'
 import { useToast } from '@/lib/ToastContext'
-import { Eye, EyeOff, UserCircle2, Bike, ArrowLeft, CheckCircle2, Camera, Image, X, Mail } from 'lucide-react'
+import { Eye, EyeOff, UserCircle2, Bike, ArrowLeft, CheckCircle2, X, Mail } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
-import CameraCapture from '@/components/ui/CameraCapture'
 import NominatimAddressPicker from '@/components/ui/NominatimAddressPicker'
 import PhilippinePhoneInput from '@/components/ui/PhilippinePhoneInput'
 import AuthBackground from '@/components/ui/AuthBackground'
@@ -31,17 +30,13 @@ function getErrorMessage(err) {
   return 'Something went wrong. Please try again.'
 }
 
+
 // ── Wrong Portal Screen ─────────────────────────────────────────
 function WrongPortalScreen({ wrongRole, onGoCorrect, onBack }) {
   const isDriver = wrongRole === 'driver'
   return (
     <AuthBackground>
-      <div
-      className="min-h-screen flex items-center justify-center p-5 relative bg-cover bg-center bg-green-dark"
-      style={{ backgroundImage: `url(${BackgroundImage})` }}
-    >
-      {/* Overlay */}
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-[1px] pointer-events-none" />
+      <div className="w-full max-w-sm">
 
         {/* Card */}
         <div className="bg-white rounded-3xl p-8 shadow-2xl text-center">
@@ -511,68 +506,9 @@ function DriverPanel({ onBack, onSwitch }) {
     }))
   }
 
-  // Document photos — driver's license, OR (Official Receipt), CR
-  // (Certificate of Registration). Each field holds { file, previewUrl }.
-  // Two explicit options are offered per document: an in-app camera
-  // capture (CameraCapture.jsx, using getUserMedia) and a plain gallery
-  // file picker. A single <input type="file" accept="image/*"> that
-  // *hopes* the OS surfaces a camera option isn't reliable — desktop
-  // browsers largely ignore the `capture` attribute, and behavior varies
-  // across mobile browsers/webviews — so "take a photo" needed to be a
-  // real, guaranteed feature rather than something left to chance.
-  const [docs, setDocs] = useState({ license_front: null, license_back: null, or: null, cr: null })
-  const [cameraFor, setCameraFor] = useState(null) // which doc key the camera modal is open for
-  const MAX_DOC_MB = 8
-
-  const setDoc = (key, file, previewUrl) => {
-    setError('')
-    setDocs(prev => {
-      if (prev[key]?.previewUrl) URL.revokeObjectURL(prev[key].previewUrl)
-      return { ...prev, [key]: { file, previewUrl } }
-    })
-  }
-
-  const handleDocSelect = (key, file) => {
-    if (!file) return
-    if (!file.type.startsWith('image/')) {
-      setError('Please upload an image file (JPG or PNG).')
-      return
-    }
-    if (file.size > MAX_DOC_MB * 1024 * 1024) {
-      setError(`That image is too large — please keep it under ${MAX_DOC_MB}MB.`)
-      return
-    }
-    setDoc(key, file, URL.createObjectURL(file))
-  }
-
-  const handleCameraCapture = (file, previewUrl) => {
-    setDoc(cameraFor, file, previewUrl)
-    setCameraFor(null)
-  }
-
-  // If getUserMedia fails (permission denied, no camera, etc.), the
-  // camera modal offers "choose from gallery instead" — this triggers a
-  // shared hidden file input for whichever doc key the camera was open
-  // for, captured via closure at the moment the modal was opened.
-  const galleryFallbackRef = useRef(null)
-  const handleFallbackToGallery = () => {
-    const key = cameraFor
-    setTimeout(() => {
-      const input = galleryFallbackRef.current
-      if (input) {
-        input.dataset.forKey = key
-        input.click()
-      }
-    }, 50)
-  }
-
-  const clearDoc = (key) => {
-    setDocs(prev => {
-      if (prev[key]?.previewUrl) URL.revokeObjectURL(prev[key].previewUrl)
-      return { ...prev, [key]: null }
-    })
-  }
-
+  // Document upload (License/OR/CR) no longer happens during
+  // registration — see DriverDocumentUpload.jsx, shown after first login
+  // instead, once the driver actually has a session.
   const accent = 'focus:border-orange-400'
 
   if (wrongRole) return (
@@ -617,28 +553,21 @@ function DriverPanel({ onBack, onSwitch }) {
     if (rf.password !== rf.confirm) return setError('Passwords do not match.')
     if (rf.paymentMethods.length === 0)
       return setError('Select at least one payment method you accept (Cash, GCash, or Maya).')
-    if (!docs.license_front || !docs.license_back || !docs.or || !docs.cr)
-      return setError('Please upload photos of your License (front and back), OR, and CR — admin needs these to verify your account.')
     setLoading(true)
     try {
+      // Pass name + role as signup metadata — handle_new_auth_user()
+      // reads this to create the base users row correctly as 'driver'
+      // instead of defaulting to 'customer'. complete_driver_registration
+      // below only fills in what that trigger doesn't (phone, address,
+      // coordinates, plus the drivers row itself).
       const { data: authData, error: signUpError } = await supabase.auth.signUp({
         email: rf.email.trim(),
         password: rf.password,
+        options: { data: { name: rf.name.trim(), role: 'driver' } },
       })
       if (signUpError) throw signUpError
       const userId = authData?.user?.id
       if (!userId) throw new Error('Signup failed — no user ID.')
-
-      const { error: userErr } = await supabase.from('users').upsert({
-        id: userId, name: rf.name.trim(),
-        email: rf.email.trim().toLowerCase(),
-        phone: rf.phone?.trim() || null,
-        address: rf.address?.trim() || null,
-        address_lat: rf.addressLat ?? null,
-        address_lng: rf.addressLng ?? null,
-        role: 'driver', status: 'active',
-      })
-      if (userErr) throw userErr
 
       // plate is NOT NULL + UNIQUE in the schema, but we no longer collect
       // it here — admin reads the real plate off the License/OR/CR photos
@@ -649,48 +578,27 @@ function DriverPanel({ onBack, onSwitch }) {
       // displayed until admin fills in the actual one.
       const placeholderPlate = `PENDING-${userId.slice(0, 8).toUpperCase()}`
 
-      const { error: driverErr } = await supabase.from('drivers').insert({
-        user_id: userId, name: rf.name.trim(),
-        plate: placeholderPlate,
-        vehicle_type: rf.vehicleType,
-        route: rf.route?.trim() || '',
-        license_no: '',
-        status: 'inactive', verified: false,
-        rating: 0, trips: 0, earnings: 0,
-        color: '#E84C27',
-        payment_methods: rf.paymentMethods,
+      // "Confirm email" (required for commuter OTP) is a project-wide
+      // Supabase setting — signUp() here returns session: null until
+      // admin confirms this account (folded into their existing "Verify
+      // Driver" click — see AdminContext.jsx). With no active session,
+      // direct client-side table writes fail RLS entirely. This RPC runs
+      // SECURITY DEFINER (bypasses RLS server-side), so it succeeds
+      // regardless of session state — only document upload needs to wait
+      // for a real session, which is why that now happens after first
+      // login instead (see DriverDocumentUpload.jsx).
+      const { error: registerErr } = await supabase.rpc('complete_driver_registration', {
+        p_user_id: userId,
+        p_phone: rf.phone?.trim() || null,
+        p_address: rf.address?.trim() || null,
+        p_address_lat: rf.addressLat ?? null,
+        p_address_lng: rf.addressLng ?? null,
+        p_plate: placeholderPlate,
+        p_vehicle_type: rf.vehicleType,
+        p_route: rf.route?.trim() || '',
+        p_payment_methods: rf.paymentMethods,
       })
-      if (driverErr) throw driverErr
-
-      // Upload the 4 document photos to the driver's own storage folder,
-      // then record the resulting paths on their drivers row so admin can
-      // pull up signed URLs to review them before verifying.
-      const uploadDoc = async (key, file) => {
-        const ext = file.name.split('.').pop() || 'jpg'
-        const path = `${userId}/${key}.${ext}`
-        const { error: uploadErr } = await supabase.storage
-          .from('driver-documents')
-          .upload(path, file, { upsert: true, contentType: file.type })
-        if (uploadErr) throw new Error(`Failed to upload ${key.toUpperCase()} photo: ${uploadErr.message}`)
-        return path
-      }
-
-      const [licenseFrontPath, licenseBackPath, orPath, crPath] = await Promise.all([
-        uploadDoc('license_front', docs.license_front.file),
-        uploadDoc('license_back', docs.license_back.file),
-        uploadDoc('or', docs.or.file),
-        uploadDoc('cr', docs.cr.file),
-      ])
-
-      const { error: pathErr } = await supabase.from('drivers')
-        .update({
-          license_photo_path: licenseFrontPath,
-          license_back_photo_path: licenseBackPath,
-          or_photo_path: orPath,
-          cr_photo_path: crPath,
-        })
-        .eq('user_id', userId)
-      if (pathErr) throw pathErr
+      if (registerErr) throw registerErr
 
       setDone(true)
     } catch (err) { setError(getErrorMessage(err)) }
@@ -705,7 +613,7 @@ function DriverPanel({ onBack, onSwitch }) {
       <div className="w-full max-w-sm bg-white rounded-3xl p-8 shadow-2xl text-center">
         <CheckCircle2 size={52} className="text-cta mx-auto mb-4" />
         <h2 className="text-xl font-black text-navy mb-2">Application Submitted!</h2>
-        <p className="text-sub text-sm leading-relaxed">Your driver registration is pending review by <span className="font-bold text-navy">LTO Calbayog admin</span>, who will confirm your plate and license number from your uploaded documents. You'll be notified once verified.</p>
+        <p className="text-sub text-sm leading-relaxed">Your account has been created. LTO Calbayog admin needs to confirm it before you can sign in — once they do, log in and you'll be asked to upload your License, OR, and CR for review.</p>
         <button onClick={() => { setDone(false); setTab('login'); setLf(p => ({ ...p, email: rf.email })) }}
           className="mt-6 w-full py-3 text-white font-black text-sm uppercase tracking-widest rounded-2xl bg-cta">
           Back to Sign In
@@ -847,54 +755,6 @@ function DriverPanel({ onBack, onSwitch }) {
               })}
             </div>
 
-            <p className="text-[10px] font-black uppercase tracking-widest text-cta border-b border-orange-100 pb-1 pt-1">Verification Documents</p>
-            <p className="text-[11px] text-sub -mt-1">
-              Take a photo or upload from your gallery — admin reviews these before approving your account.
-            </p>
-            {[
-              { key: 'license_front', label: "Driver's License — Front *" },
-              { key: 'license_back',  label: "Driver's License — Back *" },
-              { key: 'or',            label: 'OR (Official Receipt) *' },
-              { key: 'cr',            label: 'CR (Certificate of Registration) *' },
-            ].map(({ key, label }) => (
-              <div key={key}>
-                <label className={labelCls}>{label}</label>
-                {docs[key] ? (
-                  <div className="mt-1.5 flex items-center gap-3 bg-surface rounded-2xl p-2.5">
-                    <img src={docs[key].previewUrl} alt={label} className="w-14 h-14 rounded-xl object-cover flex-shrink-0" />
-                    <p className="flex-1 text-xs font-semibold text-navy truncate">{docs[key].file.name}</p>
-                    <button type="button" onClick={() => clearDoc(key)} disabled={loading}
-                      className="p-1.5 text-sub hover:text-red-600 flex-shrink-0">
-                      <X size={16} />
-                    </button>
-                  </div>
-                ) : (
-                  <div className="mt-1.5 grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setCameraFor(key)}
-                      disabled={loading}
-                      className="flex items-center justify-center gap-2 h-16 border-2 border-dashed border-border rounded-2xl text-sub text-xs font-bold hover:border-orange-300 hover:text-cta transition-colors"
-                    >
-                      <Camera size={16} />
-                      Take Photo
-                    </button>
-                    <label className="flex items-center justify-center gap-2 h-16 border-2 border-dashed border-border rounded-2xl text-sub text-xs font-bold cursor-pointer hover:border-orange-300 hover:text-cta transition-colors">
-                      <Image size={16} />
-                      Gallery
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        disabled={loading}
-                        onChange={e => handleDocSelect(key, e.target.files?.[0])}
-                      />
-                    </label>
-                  </div>
-                )}
-              </div>
-            ))}
-
             <p className="text-[10px] font-black uppercase tracking-widest text-cta border-b border-orange-100 pb-1 pt-1">Account</p>
             <div>
               <label className={labelCls}>Password * (min. 8 chars)</label>
@@ -918,25 +778,6 @@ function DriverPanel({ onBack, onSwitch }) {
       </div>
 
       <p className="text-white/30 text-xs mt-8">CommuterConnect © 2026 · Calbayog City</p>
-
-      {cameraFor && (
-        <CameraCapture
-          onCapture={handleCameraCapture}
-          onClose={() => setCameraFor(null)}
-          onFallbackToGallery={handleFallbackToGallery}
-        />
-      )}
-      <input
-        ref={galleryFallbackRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={e => {
-          const key = e.target.dataset.forKey
-          handleDocSelect(key, e.target.files?.[0])
-          e.target.value = '' // reset so selecting the same file again still fires onChange
-        }}
-      />
     </AuthBackground>
   )
 }
