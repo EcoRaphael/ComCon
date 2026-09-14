@@ -13,6 +13,7 @@ export default function DriverDashboard() {
   const navigate    = useNavigate()
 
   const [driver,   setDriver]   = useState(null)
+  const [hasSchedule, setHasSchedule] = useState(true) // optimistic default — avoids a flash of "disabled" before the check resolves
   const [stats,    setStats]    = useState({ total: 0, completed: 0, earnings: 0, pending: 0 })
   const [loading,  setLoading]  = useState(true)
   const [toggling, setToggling] = useState(false)
@@ -93,6 +94,12 @@ export default function DriverDashboard() {
       return
     }
 
+    const { count: scheduleCount } = await supabase
+      .from('schedules')
+      .select('id', { count: 'exact', head: true })
+      .eq('driver_id', driverRecord.id)
+    setHasSchedule(!!scheduleCount)
+
     // Get bookings + ratings in parallel
     const [bookingsRes, ratingsRes] = await Promise.all([
       supabase.from('bookings')
@@ -126,6 +133,23 @@ export default function DriverDashboard() {
     if (goingOnline && !driver.verified) {
       toast('Your account must be verified by admin before you can go online.', 'error')
       return
+    }
+    if (goingOnline) {
+      // Matches the DB-level check in enforce_verified_driver_status —
+      // this is just the friendly client-side version so the driver
+      // sees a clear message instead of a raw database error.
+      const { count, error: scheduleCheckError } = await supabase
+        .from('schedules')
+        .select('id', { count: 'exact', head: true })
+        .eq('driver_id', driver.id)
+      if (scheduleCheckError) {
+        toast('Failed to check your schedule — please try again.', 'error')
+        return
+      }
+      if (!count) {
+        toast('You don\'t have a schedule set yet — contact admin to get one assigned before going online.', 'error')
+        return
+      }
     }
     setToggling(true)
     const newStatus = goingOnline ? 'active' : 'inactive'
@@ -173,9 +197,9 @@ export default function DriverDashboard() {
         {/* Online/Offline toggle */}
         <button
           onClick={toggleStatus}
-          disabled={toggling || (!isOnline && !driver?.verified)}
+          disabled={toggling || (!isOnline && (!driver?.verified || !hasSchedule))}
           className={`w-full py-4 rounded-2xl font-black text-base flex items-center justify-center gap-3 shadow-lg active:scale-95 transition-all ${
-            (!isOnline && !driver?.verified) ? 'bg-white/10 text-white/50 cursor-not-allowed' :
+            (!isOnline && (!driver?.verified || !hasSchedule)) ? 'bg-white/10 text-white/50 cursor-not-allowed' :
             isOnline
               ? 'bg-white/10 text-white border-2 border-white/30 hover:bg-white/20'
               : 'bg-white text-green hover:bg-green-light'
@@ -186,10 +210,17 @@ export default function DriverDashboard() {
                 <Power size={22} strokeWidth={2.5} />
                 {isOnline
                   ? 'Go Offline'
-                  : (!driver?.verified ? 'Verification Required' : 'Go Online — Start Accepting Rides')}
+                  : !driver?.verified ? 'Verification Required'
+                  : !hasSchedule ? 'Schedule Required'
+                  : 'Go Online — Start Accepting Rides'}
               </>
           }
         </button>
+        {!isOnline && driver?.verified && !hasSchedule && (
+          <p className="text-white/70 text-xs text-center mt-2">
+            Contact admin to get a schedule assigned before you can go online.
+          </p>
+        )}
       </div>
 
       <div className="px-4 -mt-6 space-y-4">
