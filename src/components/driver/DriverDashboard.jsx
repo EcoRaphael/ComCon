@@ -1,5 +1,5 @@
 // src/components/driver/DriverDashboard.jsx
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '@/lib/AuthContext'
 import { useToast } from '@/lib/ToastContext'
 import { supabase } from '@/lib/supabase/client'
@@ -79,6 +79,66 @@ export default function DriverDashboard() {
       .subscribe()
     return () => supabase.removeChannel(ch)
   }, [profile?.id])
+
+  // Live GPS — Phase 2 (previously flagged as future work). While the
+  // driver is online, watch their real position via the browser's
+  // Geolocation API and push it to their own drivers row, throttled to
+  // roughly once every 12 seconds (watchPosition can fire far more often
+  // than that as the device moves — writing on every callback would be
+  // wasteful and unnecessary for a map that updates a few times a
+  // minute). This is "live while the tab is open," not true background
+  // tracking — browser geolocation generally stops updating once the
+  // driver locks their phone or switches away from the app, which is an
+  // inherent constraint of a browser-based PWA, not something fixable
+  // here. Going online still works normally even if location permission
+  // is denied or unsupported — GPS is a bonus signal for admin's map, not
+  // a requirement for accepting rides.
+  const watchIdRef = useRef(null)
+  const lastLocationSentRef = useRef(0)
+
+  useEffect(() => {
+    const isOnline = driver?.status === 'active'
+
+    if (!isOnline || !driver?.id) {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current)
+        watchIdRef.current = null
+      }
+      return
+    }
+
+    if (!('geolocation' in navigator)) return
+
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        const now = Date.now()
+        if (now - lastLocationSentRef.current < 12000) return
+        lastLocationSentRef.current = now
+
+        supabase.from('drivers').update({
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+          location_updated_at: new Date().toISOString(),
+        }).eq('id', driver.id).then(({ error }) => {
+          if (error) console.error('[DriverDashboard] failed to update location:', error)
+        })
+      },
+      (err) => {
+        // Not toasted deliberately — permission denial shouldn't block
+        // going online, and watchPosition can retry/fire this repeatedly,
+        // which would make for an annoying, repeated error toast.
+        console.warn('[DriverDashboard] geolocation error:', err.message)
+      },
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
+    )
+
+    return () => {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current)
+        watchIdRef.current = null
+      }
+    }
+  }, [driver?.status, driver?.id])
 
   async function fetchData() {
     setLoading(true)
