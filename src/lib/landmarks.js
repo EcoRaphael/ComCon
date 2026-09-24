@@ -2,16 +2,17 @@
 // Known Calbayog City pickup/dropoff locations
 // Organized by category for easy browsing
 //
-// COORDINATE ACCURACY NOTE: a handful of these (marked below) have been
-// verified against real sources (Wikipedia, official addresses) and are
-// accurate. The rest remain approximate placements around Calbayog
-// City's real center (12.06694444, 124.59472222) and known geography
-// (coastal city, port to the west, downtown clustered centrally,
-// barangays spread outward) — good enough for a functional map, but not
-// individually surveyed/geocoded. Two entries that turned out to be
-// factually wrong (not just imprecise — one institution that doesn't
-// exist, one hospital actually located in a different city) were removed
-// rather than left in with a wrong pin.
+// COORDINATE ACCURACY NOTE: most entries below have now been verified
+// against real sources (PhilAtlas barangay profiles, Wikipedia, official
+// addresses) after a visible error was reported — a barangay marker was
+// showing up in open water on the live map. That turned out to be a
+// systemic issue, not a one-off: nearly every barangay coordinate in the
+// original list was a rough guess, some by several kilometers, several
+// in the wrong direction from the city center entirely. All but one
+// (Cag-otes, still an approximation — no individually documented source
+// found) are now sourced. Two entries that were factually wrong — not
+// just imprecise, but referring to places that don't exist in Calbayog
+// at all — were removed rather than left in with a wrong pin.
 
 export const LANDMARKS = [
   // Government & Civic
@@ -49,19 +50,21 @@ export const LANDMARKS = [
   { id: 'plaza',           name: 'Calbayog City Plaza',        category: 'Landmark',   lat: 12.0679, lng: 124.5950 },
   { id: 'pagatpatan',      name: 'Pagatpatan Bridge',          category: 'Landmark',   lat: 12.0611, lng: 124.6021 },
 
-  // Barangays
-  { id: 'brgy-rawis',      name: 'Brgy. Rawis',                category: 'Barangay',   lat: 12.0812, lng: 124.5901 },
-  { id: 'brgy-lonoy',      name: 'Brgy. Lonoy',                category: 'Barangay',   lat: 12.0521, lng: 124.5847 },
-  { id: 'brgy-oquendo',    name: 'Brgy. Oquendo',              category: 'Barangay',   lat: 12.0453, lng: 124.5779 },
-  { id: 'brgy-hamorawon',  name: 'Brgy. Hamorawon',            category: 'Barangay',   lat: 12.0567, lng: 124.6087 },
-  { id: 'brgy-aguititan',  name: 'Brgy. Aguit-itan',           category: 'Barangay',   lat: 12.0398, lng: 124.5698 },
-  { id: 'brgy-bagacay',    name: 'Brgy. Bagacay',              category: 'Barangay',   lat: 12.0892, lng: 124.6034 },
-  { id: 'brgy-san-joaquin',name: 'Brgy. San Joaquin',          category: 'Barangay',   lat: 12.0759, lng: 124.6098 },
-  { id: 'brgy-san-pol',    name: 'Brgy. San Policarpo',        category: 'Barangay',   lat: 12.0489, lng: 124.6156 },
-  { id: 'brgy-tinaplacan', name: 'Brgy. Tinaplacan',           category: 'Barangay',   lat: 12.0934, lng: 124.5765 },
-  { id: 'brgy-cabatuan',   name: 'Brgy. Cabatuan',             category: 'Barangay',   lat: 12.0287, lng: 124.5934 },
-  { id: 'brgy-cag-otes',   name: 'Brgy. Cag-otes',             category: 'Barangay',   lat: 12.0845, lng: 124.5678 },
-  { id: 'brgy-maguino-o',  name: 'Brgy. Maguino-o',            category: 'Barangay',   lat: 12.0212, lng: 124.6045 },
+  // Barangays — all verified against PhilAtlas barangay profiles except
+  // Cag-otes, which remains an approximation (no individually documented
+  // source found).
+  { id: 'brgy-rawis',      name: 'Brgy. Rawis',                category: 'Barangay',   lat: 12.0649, lng: 124.6013 }, // verified
+  { id: 'brgy-lonoy',      name: 'Brgy. Lonoy',                category: 'Barangay',   lat: 12.0932, lng: 124.5315 }, // verified
+  { id: 'brgy-oquendo',    name: 'Brgy. Oquendo',              category: 'Barangay',   lat: 12.1288, lng: 124.5363 }, // verified
+  { id: 'brgy-hamorawon',  name: 'Brgy. Hamorawon',            category: 'Barangay',   lat: 12.0785, lng: 124.5996 }, // verified
+  { id: 'brgy-aguititan',  name: 'Brgy. Aguit-itan',           category: 'Barangay',   lat: 12.0672, lng: 124.5937 }, // verified — formerly "Poblacion", near historic city center
+  { id: 'brgy-bagacay',    name: 'Brgy. Bagacay',              category: 'Barangay',   lat: 12.0593, lng: 124.6144 }, // verified
+  { id: 'brgy-san-joaquin','name': 'Brgy. San Joaquin',        'category': 'Barangay', lat: 12.1706, lng: 124.4278 }, // verified
+  { id: 'brgy-san-pol',    name: 'Brgy. San Policarpio',       category: 'Barangay',   lat: 12.0691, lng: 124.5684 }, // verified — corrected spelling too (was "San Policarpo")
+  { id: 'brgy-tinaplacan', name: 'Brgy. Tinaplacan',           category: 'Barangay',   lat: 12.2515, lng: 124.3692 }, // verified
+  { id: 'brgy-cabatuan',   name: 'Brgy. Cabatuan',             category: 'Barangay',   lat: 12.1974, lng: 124.5176 }, // verified
+  { id: 'brgy-cag-otes',   name: 'Brgy. Cag-otes',             category: 'Barangay',   lat: 12.0845, lng: 124.5678 }, // still approximate — no source found
+  { id: 'brgy-maguino-o',  name: 'Brgy. Maguino-o',            category: 'Barangay',   lat: 12.1391, lng: 124.4611 }, // verified
 ]
 
 export const CATEGORIES = ['All', 'Terminal', 'Government', 'Market', 'School', 'Hospital', 'Landmark', 'Barangay']
