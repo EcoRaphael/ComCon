@@ -1,5 +1,6 @@
 // src/components/pages/Home.jsx
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/lib/AuthContext'
 import { supabase } from '@/lib/supabase/client'
@@ -328,8 +329,15 @@ export default function Home() {
         )}
       </div>
 
-      {/* Stat card modals */}
-      {activeModal && (
+      {/* Stat card modals — portaled directly to document.body, not
+          rendered inline within AppLayout's nested divs. A fixed-position
+          modal here was getting visually undercut by the layout's own
+          floating "Where are you going?" button despite a higher
+          z-index — a classic stacking-context conflict between fixed
+          elements at different depths in the tree. A portal sidesteps
+          that entirely by rendering completely outside AppLayout's DOM
+          structure, guaranteeing this is always the top-most layer. */}
+      {activeModal && createPortal(
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-5" onClick={() => setActiveModal(null)}>
           <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-sm max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="sticky top-0 bg-white flex items-center justify-between px-5 py-4 border-b border-border">
@@ -419,7 +427,8 @@ export default function Home() {
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
