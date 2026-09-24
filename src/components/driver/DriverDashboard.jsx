@@ -4,7 +4,7 @@ import { useAuth } from '@/lib/AuthContext'
 import { useToast } from '@/lib/ToastContext'
 import { supabase } from '@/lib/supabase/client'
 import { useNavigate } from 'react-router-dom'
-import { Power, Star, Wallet, Ticket, TrendingUp, ChevronRight } from 'lucide-react'
+import { Power, Star, Wallet, Ticket, TrendingUp, ChevronRight, X, Calendar, CheckCircle2, XCircle, Clock } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
 
 export default function DriverDashboard() {
@@ -15,6 +15,9 @@ export default function DriverDashboard() {
   const [driver,   setDriver]   = useState(null)
   const [hasSchedule, setHasSchedule] = useState(true) // optimistic default — avoids a flash of "disabled" before the check resolves
   const [stats,    setStats]    = useState({ total: 0, completed: 0, earnings: 0, pending: 0 })
+  const [allBookings, setAllBookings] = useState([])
+  const [allRatings,  setAllRatings]  = useState([])
+  const [activeModal, setActiveModal] = useState(null) // null | 'earnings' | 'rides' | 'completed' | 'rating'
   const [loading,  setLoading]  = useState(true)
   const [toggling, setToggling] = useState(false)
   const [pendingBookings, setPendingBookings] = useState([])
@@ -163,11 +166,13 @@ export default function DriverDashboard() {
     // Get bookings + ratings in parallel
     const [bookingsRes, ratingsRes] = await Promise.all([
       supabase.from('bookings')
-        .select('id, status, fare, created_at')
-        .eq('driver_id', driverRecord.id),
+        .select('id, status, fare, pickup, dropoff, created_at')
+        .eq('driver_id', driverRecord.id)
+        .order('created_at', { ascending: false }),
       supabase.from('ratings')
-        .select('stars')
-        .eq('driver_id', driverRecord.id),
+        .select('stars, comment, created_at, customer:users!customer_id(name)')
+        .eq('driver_id', driverRecord.id)
+        .order('created_at', { ascending: false }),
     ])
     const bookings   = bookingsRes.data  || []
     const ratingRows = ratingsRes.data   || []
@@ -177,6 +182,8 @@ export default function DriverDashboard() {
     // Merge live rating into driver object
     const driverData = { ...driverRecord, rating: avgRating }
     setDriver(driverData)
+    setAllBookings(bookings)
+    setAllRatings(ratingRows)
 
     const completed = bookings.filter(b => b.status === 'completed')
     const pending   = bookings.filter(b => b.status === 'pending')
@@ -227,6 +234,30 @@ export default function DriverDashboard() {
   const firstName   = profile?.name?.split(' ')[0] || 'Driver'
   const hour        = new Date().getHours()
   const greeting    = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
+
+  // Derived data for the four stat-card modals — computed from the raw
+  // bookings/ratings already fetched in fetchData(), not separate
+  // queries, since the dashboard already has everything needed.
+  const completedBookings = allBookings.filter(b => b.status === 'completed')
+  const now      = new Date()
+  const todayStr = now.toISOString().split('T')[0]
+  const weekAgo  = new Date(now); weekAgo.setDate(now.getDate() - 7)
+  const monthAgo = new Date(now); monthAgo.setMonth(now.getMonth() - 1)
+  const earningsBreakdown = {
+    today:   completedBookings.filter(b => b.created_at?.startsWith(todayStr)).reduce((s, b) => s + Number(b.fare || 0), 0),
+    week:    completedBookings.filter(b => new Date(b.created_at) >= weekAgo).reduce((s, b) => s + Number(b.fare || 0), 0),
+    month:   completedBookings.filter(b => new Date(b.created_at) >= monthAgo).reduce((s, b) => s + Number(b.fare || 0), 0),
+    allTime: stats.earnings,
+  }
+  const rideCounts = {
+    pending:   allBookings.filter(b => b.status === 'pending').length,
+    ongoing:   allBookings.filter(b => b.status === 'ongoing').length,
+    completed: allBookings.filter(b => b.status === 'completed').length,
+    cancelled: allBookings.filter(b => b.status === 'cancelled').length,
+  }
+  const ratingDist = [5, 4, 3, 2, 1].map(star => ({
+    star, count: allRatings.filter(r => Math.round(r.stars) === star).length,
+  }))
 
   if (loading) return <Spinner fullScreen label="Loading dashboard..." />
 
@@ -288,18 +319,22 @@ export default function DriverDashboard() {
         {/* Stats */}
         <div className="grid grid-cols-2 gap-3">
           {[
-            { icon: Wallet,    label: 'Total Earnings', value: `₱${stats.earnings.toFixed(2)}`, color: 'text-green',       bg: 'bg-green-light'   },
-            { icon: Ticket,    label: 'Total Rides',    value: stats.total,                      color: 'text-blue-600',    bg: 'bg-blue-50'       },
-            { icon: TrendingUp,label: 'Completed',      value: stats.completed,                  color: 'text-purple-600',  bg: 'bg-purple-50'     },
-            { icon: Star,      label: 'Rating',         value: Number(driver?.rating || 0).toFixed(1) + ' ★', color: 'text-amber-600', bg: 'bg-amber-50' },
-          ].map(({ icon: Icon, label, value, color, bg }) => (
-            <div key={label} className="bg-white rounded-2xl p-4 shadow-sm border border-border/50">
+            { icon: Wallet,    label: 'Total Earnings', value: `₱${stats.earnings.toFixed(2)}`, color: 'text-green',       bg: 'bg-green-light',  modal: 'earnings'  },
+            { icon: Ticket,    label: 'Total Rides',    value: stats.total,                      color: 'text-blue-600',    bg: 'bg-blue-50',      modal: 'rides'      },
+            { icon: TrendingUp,label: 'Completed',      value: stats.completed,                  color: 'text-purple-600',  bg: 'bg-purple-50',    modal: 'completed'  },
+            { icon: Star,      label: 'Rating',         value: Number(driver?.rating || 0).toFixed(1) + ' ★', color: 'text-amber-600', bg: 'bg-amber-50', modal: 'rating' },
+          ].map(({ icon: Icon, label, value, color, bg, modal }) => (
+            <button
+              key={label}
+              onClick={() => setActiveModal(modal)}
+              className="bg-white rounded-2xl p-4 shadow-sm border border-border/50 text-left active:scale-[0.97] transition-transform"
+            >
               <div className={`w-10 h-10 ${bg} rounded-xl flex items-center justify-center mb-2.5`}>
                 <Icon size={18} className={color} />
               </div>
               <p className="text-xl font-black text-navy">{value}</p>
               <p className="text-[10px] text-sub font-bold uppercase tracking-wide mt-0.5">{label}</p>
-            </div>
+            </button>
           ))}
         </div>
 
@@ -351,6 +386,141 @@ export default function DriverDashboard() {
           </div>
         )}
       </div>
+
+      {/* Stat card modals — each stat card opens its own tailored view
+          rather than all four converging on the same bookings list. */}
+      {activeModal && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-5" onClick={() => setActiveModal(null)}>
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-sm max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="sticky top-0 bg-white flex items-center justify-between px-5 py-4 border-b border-border">
+              <h3 className="font-black text-navy text-base">
+                {activeModal === 'earnings'  && 'Earnings Breakdown'}
+                {activeModal === 'rides'     && 'All Rides'}
+                {activeModal === 'completed' && 'Completed Rides'}
+                {activeModal === 'rating'    && 'Your Rating'}
+              </h3>
+              <button onClick={() => setActiveModal(null)} className="p-1.5 text-sub hover:text-navy">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-5">
+              {/* Earnings */}
+              {activeModal === 'earnings' && (
+                <div className="space-y-3">
+                  {[
+                    { label: 'Today',    value: earningsBreakdown.today },
+                    { label: 'This Week', value: earningsBreakdown.week },
+                    { label: 'This Month', value: earningsBreakdown.month },
+                    { label: 'All Time', value: earningsBreakdown.allTime, highlight: true },
+                  ].map(({ label, value, highlight }) => (
+                    <div key={label} className={`flex items-center justify-between rounded-2xl p-4 ${highlight ? 'bg-green-light' : 'bg-surface'}`}>
+                      <span className={`text-sm font-semibold ${highlight ? 'text-green' : 'text-navy'}`}>{label}</span>
+                      <span className={`text-lg font-black ${highlight ? 'text-green' : 'text-navy'}`}>₱{value.toFixed(2)}</span>
+                    </div>
+                  ))}
+                  <p className="text-[11px] text-sub text-center pt-1">Based on completed rides only</p>
+                </div>
+              )}
+
+              {/* Total Rides — breakdown by status */}
+              {activeModal === 'rides' && (
+                <div className="space-y-3">
+                  {[
+                    { label: 'Pending',   count: rideCounts.pending,   icon: Clock,        color: 'text-amber-600',  bg: 'bg-amber-50' },
+                    { label: 'Ongoing',   count: rideCounts.ongoing,   icon: TrendingUp,   color: 'text-blue-600',   bg: 'bg-blue-50' },
+                    { label: 'Completed', count: rideCounts.completed, icon: CheckCircle2, color: 'text-green',      bg: 'bg-green-light' },
+                    { label: 'Cancelled', count: rideCounts.cancelled, icon: XCircle,      color: 'text-red-600',    bg: 'bg-red-50' },
+                  ].map(({ label, count, icon: Icon, color, bg }) => (
+                    <div key={label} className="flex items-center gap-3">
+                      <div className={`w-9 h-9 ${bg} rounded-xl flex items-center justify-center flex-shrink-0`}>
+                        <Icon size={16} className={color} />
+                      </div>
+                      <span className="flex-1 text-sm font-semibold text-navy">{label}</span>
+                      <span className="text-lg font-black text-navy">{count}</span>
+                    </div>
+                  ))}
+                  <button
+                    onClick={() => { setActiveModal(null); navigate('/driver/bookings') }}
+                    className="w-full mt-2 py-3 rounded-2xl bg-surface text-navy text-sm font-bold flex items-center justify-center gap-1.5"
+                  >
+                    View Full Booking List <ChevronRight size={15} />
+                  </button>
+                </div>
+              )}
+
+              {/* Completed rides list */}
+              {activeModal === 'completed' && (
+                completedBookings.length === 0 ? (
+                  <p className="text-sub text-sm text-center py-6">No completed rides yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {completedBookings.map(b => (
+                      <div key={b.id} className="bg-surface rounded-2xl p-3.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-semibold text-navy truncate">{b.pickup} → {b.dropoff}</p>
+                            <p className="text-[10px] text-sub mt-1 flex items-center gap-1">
+                              <Calendar size={10} />
+                              {new Date(b.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </p>
+                          </div>
+                          <span className="text-sm font-black text-green flex-shrink-0">₱{Number(b.fare || 0).toFixed(2)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )
+              )}
+
+              {/* Rating breakdown */}
+              {activeModal === 'rating' && (
+                <div className="space-y-5">
+                  <div className="text-center">
+                    <p className="text-4xl font-black text-navy">{Number(driver?.rating || 0).toFixed(1)}</p>
+                    <div className="flex justify-center gap-0.5 mt-1">
+                      {[1,2,3,4,5].map(s => (
+                        <Star key={s} size={16} className={s <= Math.round(driver?.rating || 0) ? 'text-amber-500 fill-amber-500' : 'text-border'} />
+                      ))}
+                    </div>
+                    <p className="text-xs text-sub mt-1">{allRatings.length} rating{allRatings.length !== 1 ? 's' : ''}</p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    {ratingDist.map(({ star, count }) => {
+                      const pct = allRatings.length ? Math.round((count / allRatings.length) * 100) : 0
+                      return (
+                        <div key={star} className="flex items-center gap-2">
+                          <span className="text-xs font-semibold text-sub w-8">{star}★</span>
+                          <div className="flex-1 h-1.5 bg-surface rounded-full overflow-hidden">
+                            <div className="h-full bg-amber-400 rounded-full" style={{ width: `${pct}%` }} />
+                          </div>
+                          <span className="text-[10px] text-sub w-6 text-right">{count}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {allRatings.some(r => r.comment) && (
+                    <div className="space-y-2 pt-1">
+                      <p className="text-[10px] font-bold text-sub uppercase tracking-wider">Recent Feedback</p>
+                      {allRatings.filter(r => r.comment).slice(0, 5).map((r, i) => (
+                        <div key={i} className="bg-surface rounded-2xl p-3.5">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-bold text-navy">{r.customer?.name || 'Commuter'}</span>
+                            <span className="text-amber-500 text-xs font-bold">{'★'.repeat(Math.round(r.stars))}</span>
+                          </div>
+                          <p className="text-xs text-sub">{r.comment}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

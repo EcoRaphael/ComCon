@@ -5,7 +5,8 @@ import { useAuth } from '@/lib/AuthContext'
 import { supabase } from '@/lib/supabase/client'
 import {
   Clock, Car, Bus, Star,
-  Navigation, History, User, ArrowRight, ChevronRight
+  Navigation, History, User, ArrowRight, ChevronRight,
+  X, Wallet, MessageSquareWarning, Calendar,
 } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
 import RideMap from '@/components/ui/RideMap'
@@ -33,6 +34,10 @@ export default function Home() {
   const [recentBookings, setRecentBookings] = useState([])
   const [fareMatrix,     setFareMatrix]     = useState([])
   const [loading,        setLoading]        = useState(true)
+  const [allBookings,    setAllBookings]    = useState([])
+  const [myReports,      setMyReports]      = useState([])
+  const [myRatings,      setMyRatings]      = useState([])
+  const [activeModal,    setActiveModal]    = useState(null) // null | 'spent' | 'reports' | 'ratings'
 
   useEffect(() => {
     if (!profile?.id) return
@@ -51,24 +56,62 @@ export default function Home() {
 
   async function fetchData() {
     setLoading(true)
-    const [bookingsRes, fareRes] = await Promise.all([
+    const [bookingsRes, fareRes, allBookingsRes, reportsRes, ratingsRes] = await Promise.all([
       supabase.from('bookings')
         .select('*, drivers!driver_id(name, plate, vehicle_type, rating, color, user_id, payment_methods)')
         .eq('customer_id', profile.id)
         .order('created_at', { ascending: false })
         .limit(10),
       supabase.from('fare_matrix').select('*').order('vehicle_type'),
+      // Lightweight, unlimited — the query above caps at 10 rows and
+      // carries a heavy driver join, not suitable for an all-time
+      // spending total.
+      supabase.from('bookings')
+        .select('fare, status, created_at')
+        .eq('customer_id', profile.id),
+      supabase.from('reports')
+        .select('id, issue_type, severity, status, description, created_at, driver:drivers!driver_id(name)')
+        .eq('customer_id', profile.id)
+        .order('created_at', { ascending: false }),
+      supabase.from('ratings')
+        .select('id, stars, comment, created_at, driver:drivers!driver_id(name)')
+        .eq('customer_id', profile.id)
+        .order('created_at', { ascending: false }),
     ])
     const bookings = bookingsRes.data || []
     setActiveBooking(bookings.find(b => ['pending','ongoing'].includes(b.status)) || null)
     setRecentBookings(bookings.filter(b => !['pending','ongoing'].includes(b.status)).slice(0, 3))
     setFareMatrix(fareRes.data || [])
+    setAllBookings(allBookingsRes.data || [])
+    setMyReports(reportsRes.data || [])
+    setMyRatings(ratingsRes.data || [])
     setLoading(false)
   }
 
   const hour      = new Date().getHours()
   const greeting  = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
   const firstName = profile?.name?.split(' ')[0] || 'Commuter'
+
+  // Total Spent breakdown — same shape as the driver dashboard's
+  // earnings modal, computed from allBookings (the unlimited, lightweight
+  // fetch), not the capped/joined `recentBookings` list.
+  const completedSpend = allBookings.filter(b => b.status === 'completed')
+  const now      = new Date()
+  const todayStr = now.toISOString().split('T')[0]
+  const weekAgo  = new Date(now); weekAgo.setDate(now.getDate() - 7)
+  const monthAgo = new Date(now); monthAgo.setMonth(now.getMonth() - 1)
+  const spentBreakdown = {
+    today:   completedSpend.filter(b => b.created_at?.startsWith(todayStr)).reduce((s, b) => s + Number(b.fare || 0), 0),
+    week:    completedSpend.filter(b => new Date(b.created_at) >= weekAgo).reduce((s, b) => s + Number(b.fare || 0), 0),
+    month:   completedSpend.filter(b => new Date(b.created_at) >= monthAgo).reduce((s, b) => s + Number(b.fare || 0), 0),
+    allTime: completedSpend.reduce((s, b) => s + Number(b.fare || 0), 0),
+  }
+
+  const REPORT_STATUS_STYLE = {
+    pending:        { bg: 'bg-amber-50',  text: 'text-amber-700' },
+    'under review': { bg: 'bg-blue-50',   text: 'text-blue-700'  },
+    resolved:       { bg: 'bg-green-50',  text: 'text-green-700' },
+  }
 
   return (
     <div className="page-enter pb-8">
@@ -176,6 +219,27 @@ export default function Home() {
           ))}
         </div>
 
+        {/* Stats */}
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { icon: Wallet,              label: 'Total Spent', value: `₱${spentBreakdown.allTime.toFixed(0)}`, color: 'text-green',      bg: 'bg-green-light', modal: 'spent'   },
+            { icon: MessageSquareWarning,label: 'My Reports',  value: myReports.length,                        color: 'text-red-600',    bg: 'bg-red-50',      modal: 'reports' },
+            { icon: Star,                label: 'Ratings Given', value: myRatings.length,                      color: 'text-amber-600',  bg: 'bg-amber-50',    modal: 'ratings' },
+          ].map(({ icon: Icon, label, value, color, bg, modal }) => (
+            <button
+              key={label}
+              onClick={() => setActiveModal(modal)}
+              className="bg-white rounded-2xl p-3.5 shadow-sm border border-border/50 text-left active:scale-[0.97] transition-transform"
+            >
+              <div className={`w-9 h-9 ${bg} rounded-xl flex items-center justify-center mb-2`}>
+                <Icon size={16} className={color} />
+              </div>
+              <p className="text-base font-black text-navy leading-tight">{value}</p>
+              <p className="text-[9px] text-sub font-bold uppercase tracking-wide mt-0.5 leading-tight">{label}</p>
+            </button>
+          ))}
+        </div>
+
         {/* Fare rates */}
         {fareMatrix.length > 0 && (
           <div className="bg-white rounded-2xl shadow-sm border border-border/50 overflow-hidden">
@@ -183,20 +247,24 @@ export default function Home() {
               <p className="text-sm font-black text-navy">Today's Fare Rates</p>
               <span className="text-[10px] text-sub bg-surface px-2 py-1 rounded-full font-medium">LTFRB Regulated</span>
             </div>
-            <div className="grid grid-cols-2 gap-px bg-border/20">
+            <div className="grid grid-cols-3 gap-px bg-border/20">
               {fareMatrix.map(f => {
                 const Icon = VEHICLE_ICONS[f.vehicle_type] || Car
                 return (
-                  <div key={f.vehicle_type} className="bg-white px-4 py-3.5 flex items-center gap-3">
+                  <button
+                    key={f.vehicle_type}
+                    onClick={() => navigate('/routes', { state: { preselectVehicle: f.vehicle_type } })}
+                    className="bg-white px-2.5 py-4 flex flex-col items-center text-center gap-1.5 active:bg-surface transition-colors"
+                  >
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${VEHICLE_COLORS[f.vehicle_type] || 'bg-gray-50 text-gray-600'}`}>
                       <Icon size={18} />
                     </div>
                     <div>
                       <p className="text-[10px] text-sub font-bold">{f.vehicle_type}</p>
                       <p className="text-lg font-black text-navy leading-tight">₱{Number(f.base_fare).toFixed(0)}</p>
-                      <p className="text-[10px] text-sub">{f.seat_count || 0} seats · ₱{Number(f.per_seat || 0).toFixed(0)}/seat</p>
+                      <p className="text-[9px] text-sub leading-tight">{f.seat_count || 0} seats · ₱{Number(f.per_seat || 0).toFixed(0)}/seat</p>
                     </div>
-                  </div>
+                  </button>
                 )
               })}
             </div>
@@ -259,6 +327,100 @@ export default function Home() {
           </div>
         )}
       </div>
+
+      {/* Stat card modals */}
+      {activeModal && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-5" onClick={() => setActiveModal(null)}>
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-sm max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="sticky top-0 bg-white flex items-center justify-between px-5 py-4 border-b border-border">
+              <h3 className="font-black text-navy text-base">
+                {activeModal === 'spent'   && 'Spending Breakdown'}
+                {activeModal === 'reports' && 'My Reports'}
+                {activeModal === 'ratings' && 'Ratings I\'ve Given'}
+              </h3>
+              <button onClick={() => setActiveModal(null)} className="p-1.5 text-sub hover:text-navy">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-5">
+              {/* Total Spent breakdown */}
+              {activeModal === 'spent' && (
+                <div className="space-y-3">
+                  {[
+                    { label: 'Today',      value: spentBreakdown.today },
+                    { label: 'This Week',  value: spentBreakdown.week },
+                    { label: 'This Month', value: spentBreakdown.month },
+                    { label: 'All Time',   value: spentBreakdown.allTime, highlight: true },
+                  ].map(({ label, value, highlight }) => (
+                    <div key={label} className={`flex items-center justify-between rounded-2xl p-4 ${highlight ? 'bg-green-light' : 'bg-surface'}`}>
+                      <span className={`text-sm font-semibold ${highlight ? 'text-green' : 'text-navy'}`}>{label}</span>
+                      <span className={`text-lg font-black ${highlight ? 'text-green' : 'text-navy'}`}>₱{value.toFixed(2)}</span>
+                    </div>
+                  ))}
+                  <p className="text-[11px] text-sub text-center pt-1">Based on completed rides only</p>
+                </div>
+              )}
+
+              {/* My Reports */}
+              {activeModal === 'reports' && (
+                myReports.length === 0 ? (
+                  <p className="text-sub text-sm text-center py-6">You haven't filed any reports yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {myReports.map(r => {
+                      const s = REPORT_STATUS_STYLE[r.status] || { bg: 'bg-surface', text: 'text-sub' }
+                      return (
+                        <div key={r.id} className="bg-surface rounded-2xl p-3.5">
+                          <div className="flex items-start justify-between gap-2 mb-1.5">
+                            <p className="text-xs font-bold text-navy">{r.issue_type}</p>
+                            <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase flex-shrink-0 ${s.bg} ${s.text}`}>
+                              {r.status}
+                            </span>
+                          </div>
+                          {r.driver?.name && (
+                            <p className="text-[11px] text-sub mb-1">Against: {r.driver.name}</p>
+                          )}
+                          {r.description && (
+                            <p className="text-xs text-sub leading-relaxed mb-1.5">{r.description}</p>
+                          )}
+                          <p className="text-[10px] text-sub flex items-center gap-1">
+                            <Calendar size={10} />
+                            {new Date(r.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </p>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              )}
+
+              {/* Ratings Given */}
+              {activeModal === 'ratings' && (
+                myRatings.length === 0 ? (
+                  <p className="text-sub text-sm text-center py-6">You haven't rated any drivers yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {myRatings.map(r => (
+                      <div key={r.id} className="bg-surface rounded-2xl p-3.5">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-bold text-navy">{r.driver?.name || 'Driver'}</span>
+                          <span className="text-amber-500 text-xs font-bold">{'★'.repeat(Math.round(r.stars))}</span>
+                        </div>
+                        {r.comment && <p className="text-xs text-sub mb-1.5">{r.comment}</p>}
+                        <p className="text-[10px] text-sub flex items-center gap-1">
+                          <Calendar size={10} />
+                          {new Date(r.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

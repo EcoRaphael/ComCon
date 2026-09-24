@@ -1,6 +1,6 @@
 // src/components/pages/Routes.jsx
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/lib/AuthContext'
 import { useToast } from '@/lib/ToastContext'
@@ -21,6 +21,7 @@ export default function RoutesPage() {
   const { profile } = useAuth()
   const { toast } = useToast()
   const navigate = useNavigate()
+  const location = useLocation()
 
   const [routes, setRoutes] = useState([])
   const [fareMatrix, setFareMatrix] = useState([])
@@ -34,7 +35,10 @@ export default function RoutesPage() {
   const [selected, setSelected] = useState(null)   // selected route
   const [pickup, setPickup] = useState('')     // custom pickup landmark
   const [dropoff, setDropoff] = useState('')     // custom dropoff landmark
-  const [vehicle, setVehicle] = useState('')
+  // Pre-filled when arriving from Home.jsx's fare-rate cards (tapping a
+  // specific vehicle type there skips re-picking it here) — otherwise
+  // starts empty as before.
+  const [vehicle, setVehicle] = useState(location.state?.preselectVehicle || '')
   const [driver, setDriver] = useState(null)
   const [showDriverProfile, setShowDriverProfile] = useState(false)
   const [method, setMethod] = useState('cash')
@@ -256,7 +260,7 @@ export default function RoutesPage() {
                 />
 
                 <button
-                  onClick={() => setStep('select-vehicle')}
+                  onClick={() => setStep(vehicle ? 'select-driver' : 'select-vehicle')}
                   disabled={!pickup || !dropoff}
                   className="btn-primary w-full py-3.5 flex items-center justify-center gap-2 disabled:opacity-40">
                   Continue →
