@@ -1,5 +1,5 @@
 // src/components/driver/DriverDashboard.jsx
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '@/lib/AuthContext'
 import { useToast } from '@/lib/ToastContext'
 import { supabase } from '@/lib/supabase/client'
@@ -13,6 +13,7 @@ export default function DriverDashboard() {
   const navigate    = useNavigate()
 
   const [driver,   setDriver]   = useState(null)
+  const [hasSchedule, setHasSchedule] = useState(true) // optimistic default — avoids a flash of "disabled" before the check resolves
   const [stats,    setStats]    = useState({ total: 0, completed: 0, earnings: 0, pending: 0 })
   const [loading,  setLoading]  = useState(true)
   const [toggling, setToggling] = useState(false)
@@ -79,6 +80,66 @@ export default function DriverDashboard() {
     return () => supabase.removeChannel(ch)
   }, [profile?.id])
 
+  // Live GPS — Phase 2 (previously flagged as future work). While the
+  // driver is online, watch their real position via the browser's
+  // Geolocation API and push it to their own drivers row, throttled to
+  // roughly once every 12 seconds (watchPosition can fire far more often
+  // than that as the device moves — writing on every callback would be
+  // wasteful and unnecessary for a map that updates a few times a
+  // minute). This is "live while the tab is open," not true background
+  // tracking — browser geolocation generally stops updating once the
+  // driver locks their phone or switches away from the app, which is an
+  // inherent constraint of a browser-based PWA, not something fixable
+  // here. Going online still works normally even if location permission
+  // is denied or unsupported — GPS is a bonus signal for admin's map, not
+  // a requirement for accepting rides.
+  const watchIdRef = useRef(null)
+  const lastLocationSentRef = useRef(0)
+
+  useEffect(() => {
+    const isOnline = driver?.status === 'active'
+
+    if (!isOnline || !driver?.id) {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current)
+        watchIdRef.current = null
+      }
+      return
+    }
+
+    if (!('geolocation' in navigator)) return
+
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        const now = Date.now()
+        if (now - lastLocationSentRef.current < 12000) return
+        lastLocationSentRef.current = now
+
+        supabase.from('drivers').update({
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+          location_updated_at: new Date().toISOString(),
+        }).eq('id', driver.id).then(({ error }) => {
+          if (error) console.error('[DriverDashboard] failed to update location:', error)
+        })
+      },
+      (err) => {
+        // Not toasted deliberately — permission denial shouldn't block
+        // going online, and watchPosition can retry/fire this repeatedly,
+        // which would make for an annoying, repeated error toast.
+        console.warn('[DriverDashboard] geolocation error:', err.message)
+      },
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
+    )
+
+    return () => {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current)
+        watchIdRef.current = null
+      }
+    }
+  }, [driver?.status, driver?.id])
+
   async function fetchData() {
     setLoading(true)
     // Get driver record by user_id
@@ -92,6 +153,12 @@ export default function DriverDashboard() {
       setLoading(false)
       return
     }
+
+    const { count: scheduleCount } = await supabase
+      .from('schedules')
+      .select('id', { count: 'exact', head: true })
+      .eq('driver_id', driverRecord.id)
+    setHasSchedule(!!scheduleCount)
 
     // Get bookings + ratings in parallel
     const [bookingsRes, ratingsRes] = await Promise.all([
@@ -126,6 +193,23 @@ export default function DriverDashboard() {
     if (goingOnline && !driver.verified) {
       toast('Your account must be verified by admin before you can go online.', 'error')
       return
+    }
+    if (goingOnline) {
+      // Matches the DB-level check in enforce_verified_driver_status —
+      // this is just the friendly client-side version so the driver
+      // sees a clear message instead of a raw database error.
+      const { count, error: scheduleCheckError } = await supabase
+        .from('schedules')
+        .select('id', { count: 'exact', head: true })
+        .eq('driver_id', driver.id)
+      if (scheduleCheckError) {
+        toast('Failed to check your schedule — please try again.', 'error')
+        return
+      }
+      if (!count) {
+        toast('You don\'t have a schedule set yet — contact admin to get one assigned before going online.', 'error')
+        return
+      }
     }
     setToggling(true)
     const newStatus = goingOnline ? 'active' : 'inactive'
@@ -173,9 +257,9 @@ export default function DriverDashboard() {
         {/* Online/Offline toggle */}
         <button
           onClick={toggleStatus}
-          disabled={toggling || (!isOnline && !driver?.verified)}
+          disabled={toggling || (!isOnline && (!driver?.verified || !hasSchedule))}
           className={`w-full py-4 rounded-2xl font-black text-base flex items-center justify-center gap-3 shadow-lg active:scale-95 transition-all ${
-            (!isOnline && !driver?.verified) ? 'bg-white/10 text-white/50 cursor-not-allowed' :
+            (!isOnline && (!driver?.verified || !hasSchedule)) ? 'bg-white/10 text-white/50 cursor-not-allowed' :
             isOnline
               ? 'bg-white/10 text-white border-2 border-white/30 hover:bg-white/20'
               : 'bg-white text-green hover:bg-green-light'
@@ -186,10 +270,17 @@ export default function DriverDashboard() {
                 <Power size={22} strokeWidth={2.5} />
                 {isOnline
                   ? 'Go Offline'
-                  : (!driver?.verified ? 'Verification Required' : 'Go Online — Start Accepting Rides')}
+                  : !driver?.verified ? 'Verification Required'
+                  : !hasSchedule ? 'Schedule Required'
+                  : 'Go Online — Start Accepting Rides'}
               </>
           }
         </button>
+        {!isOnline && driver?.verified && !hasSchedule && (
+          <p className="text-white/70 text-xs text-center mt-2">
+            Contact admin to get a schedule assigned before you can go online.
+          </p>
+        )}
       </div>
 
       <div className="px-4 -mt-6 space-y-4">
