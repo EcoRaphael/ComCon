@@ -247,20 +247,24 @@ export default function Home() {
               <p className="text-sm font-black text-navy">Today's Fare Rates</p>
               <span className="text-[10px] text-sub bg-surface px-2 py-1 rounded-full font-medium">LTFRB Regulated</span>
             </div>
-            <div className="grid grid-cols-2 gap-px bg-border/20">
+            <div className="grid grid-cols-3 gap-px bg-border/20">
               {fareMatrix.map(f => {
                 const Icon = VEHICLE_ICONS[f.vehicle_type] || Car
                 return (
-                  <div key={f.vehicle_type} className="bg-white px-4 py-3.5 flex items-center gap-3">
+                  <button
+                    key={f.vehicle_type}
+                    onClick={() => navigate('/routes', { state: { preselectVehicle: f.vehicle_type } })}
+                    className="bg-white px-2.5 py-4 flex flex-col items-center text-center gap-1.5 active:bg-surface transition-colors"
+                  >
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${VEHICLE_COLORS[f.vehicle_type] || 'bg-gray-50 text-gray-600'}`}>
                       <Icon size={18} />
                     </div>
                     <div>
                       <p className="text-[10px] text-sub font-bold">{f.vehicle_type}</p>
                       <p className="text-lg font-black text-navy leading-tight">₱{Number(f.base_fare).toFixed(0)}</p>
-                      <p className="text-[10px] text-sub">{f.seat_count || 0} seats · ₱{Number(f.per_seat || 0).toFixed(0)}/seat</p>
+                      <p className="text-[9px] text-sub leading-tight">{f.seat_count || 0} seats · ₱{Number(f.per_seat || 0).toFixed(0)}/seat</p>
                     </div>
-                  </div>
+                  </button>
                 )
               })}
             </div>
