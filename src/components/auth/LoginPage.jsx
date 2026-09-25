@@ -653,6 +653,7 @@ function DriverPanel({ onBack, onSwitch }) {
   const [resetDone, setResetDone] = useState(false)
   const [newPassword, setNewPassword] = useState('')
   const [newPasswordConfirm, setNewPasswordConfirm] = useState('')
+  const [showRegPassword, setShowRegPassword] = useState(false)
 
   const handleForgotPassword = async (e) => {
     e.preventDefault(); setError('')
@@ -1179,14 +1180,26 @@ function DriverPanel({ onBack, onSwitch }) {
             <p className="text-[10px] font-black uppercase tracking-widest text-cta border-b border-orange-100 pb-1 pt-1">Account</p>
             <div>
               <label className={labelCls}>Password *</label>
-              <input type="password" className={inputCls} placeholder="••••••••"
-                value={rf.password} onChange={e => setRf(p => ({ ...p, password: e.target.value }))} disabled={loading} />
+              <div className="relative">
+                <input type={showRegPassword ? 'text' : 'password'} className={`${inputCls} pr-10`} placeholder="••••••••"
+                  value={rf.password} onChange={e => setRf(p => ({ ...p, password: e.target.value }))} disabled={loading} />
+                <button type="button" onClick={() => setShowRegPassword(s => !s)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-sub hover:text-navy">
+                  {showRegPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
             </div>
             <PasswordStrengthMeter password={rf.password} />
             <div>
               <label className={labelCls}>Confirm Password *</label>
-              <input type="password" className={inputCls} placeholder="Repeat password"
-                value={rf.confirm} onChange={e => setRf(p => ({ ...p, confirm: e.target.value }))} disabled={loading} />
+              <div className="relative">
+                <input type={showRegPassword ? 'text' : 'password'} className={`${inputCls} pr-10`} placeholder="Repeat password"
+                  value={rf.confirm} onChange={e => setRf(p => ({ ...p, confirm: e.target.value }))} disabled={loading} />
+                <button type="button" onClick={() => setShowRegPassword(s => !s)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-sub hover:text-navy">
+                  {showRegPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
             </div>
 
             <button type="submit" disabled={loading || !getPasswordStrength(rf.password).isStrong}
