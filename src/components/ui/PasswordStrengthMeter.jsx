@@ -4,8 +4,6 @@
 // actual form submission, not just drive the visual — a meter that
 // shows "weak" but still lets you submit isn't actually enforcing
 // anything.
-import { Check } from 'lucide-react'
-
 export function getPasswordStrength(password) {
   const checks = {
     length:    password.length >= 8,
@@ -48,11 +46,7 @@ export default function PasswordStrengthMeter({ password }) {
       <div className="grid grid-cols-2 gap-x-3 gap-y-1">
         {REQUIREMENTS.map(({ key, label: reqLabel }) => (
           <div key={key} className="flex items-center gap-1.5">
-            <span className={`w-4 h-4 rounded-full flex-shrink-0 flex items-center justify-center ${
-              checks[key] ? 'bg-green-500' : 'bg-border'
-            }`}>
-              {checks[key] && <Check size={11} strokeWidth={3} className="text-white" />}
-            </span>
+            <span className={`w-3 h-3 rounded-full flex-shrink-0 ${checks[key] ? 'bg-green-500' : 'bg-border'}`} />
             <span className={`text-[10px] ${checks[key] ? 'text-navy' : 'text-sub'}`}>{reqLabel}</span>
           </div>
         ))}
