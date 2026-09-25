@@ -643,6 +643,56 @@ function DriverPanel({ onBack, onSwitch }) {
     vehicleType: '', route: '', paymentMethods: ['cash'],
     password: '', confirm: ''
   })
+  const [forgotMode, setForgotMode] = useState(false)
+  const [resetEmail, setResetEmail] = useState('')
+  const [resetSending, setResetSending] = useState(false)
+  const [resetSent, setResetSent] = useState(false)
+  const [resetOtp, setResetOtp] = useState('')
+  const [resetVerifying, setResetVerifying] = useState(false)
+  const [resetVerified, setResetVerified] = useState(false)
+  const [resetDone, setResetDone] = useState(false)
+  const [newPassword, setNewPassword] = useState('')
+  const [newPasswordConfirm, setNewPasswordConfirm] = useState('')
+
+  const handleForgotPassword = async (e) => {
+    e.preventDefault(); setError('')
+    if (!resetEmail) { setError('Enter your email address.'); return }
+    setResetSending(true)
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(resetEmail.trim(), {
+      redirectTo: `${window.location.origin}/login`,
+    })
+    setResetSending(false)
+    if (resetError) { setError(resetError.message); return }
+    setResetSent(true)
+  }
+
+  const handleVerifyResetOtp = async (e) => {
+    e.preventDefault(); setError('')
+    if (resetOtp.length < 6) { setError('Enter the code from your email.'); return }
+    setResetVerifying(true)
+    const { error: verifyError } = await supabase.auth.verifyOtp({
+      email: resetEmail.trim(),
+      token: resetOtp.trim(),
+      type: 'recovery',
+    })
+    setResetVerifying(false)
+    if (verifyError) { setError(getErrorMessage(verifyError)); return }
+    setResetVerified(true)
+  }
+
+  const handleSetNewPassword = async (e) => {
+    e.preventDefault(); setError('')
+    if (!getPasswordStrength(newPassword).isStrong) {
+      setError('Password must meet all the requirements shown below.')
+      return
+    }
+    if (newPassword !== newPasswordConfirm) { setError('Passwords do not match.'); return }
+    setResetVerifying(true)
+    const { error: updateError } = await supabase.auth.updateUser({ password: newPassword })
+    setResetVerifying(false)
+    if (updateError) { setError(updateError.message); return }
+    setResetDone(true)
+  }
 
   const togglePaymentMethod = (key) => {
     setRf(prev => ({
@@ -902,23 +952,110 @@ function DriverPanel({ onBack, onSwitch }) {
         )}
 
         {tab === 'login' ? (
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className={labelCls}>Email</label>
-              <input type="email" className={inputCls} placeholder="driver@email.com"
-                value={lf.email} onChange={e => setLf(p => ({ ...p, email: e.target.value }))} disabled={loading} />
-            </div>
-            <div>
-              <label className={labelCls}>Password</label>
-              <input type="password" className={inputCls} placeholder="••••••••"
-                value={lf.password} onChange={e => setLf(p => ({ ...p, password: e.target.value }))} disabled={loading} />
-            </div>
-            <p className="text-sub text-[10px] text-center">Your account must be verified by admin before first login.</p>
-            <button type="submit" disabled={loading}
-              className="w-full py-3.5 text-white font-black text-sm uppercase tracking-widest rounded-2xl flex items-center justify-center gap-2 disabled:opacity-60 bg-cta hover:opacity-90 transition-opacity mt-1">
-              {loading ? <Spinner size={20} /> : 'Sign In'}
-            </button>
-          </form>
+          forgotMode ? (
+            resetDone ? (
+              <div className="text-center py-2">
+                <CheckCircle2 size={44} className="text-green-500 mx-auto mb-3" />
+                <h3 className="font-black text-navy mb-1">Password Updated!</h3>
+                <p className="text-sub text-sm mb-5">You can now sign in with your new password.</p>
+                <button
+                  onClick={() => {
+                    setForgotMode(false); setResetSent(false); setResetVerified(false); setResetDone(false)
+                    setResetEmail(''); setResetOtp(''); setNewPassword(''); setNewPasswordConfirm(''); setError('')
+                  }}
+                  className="text-sm font-bold text-cta"
+                >
+                  Back to Sign In
+                </button>
+              </div>
+            ) : resetVerified ? (
+              <form onSubmit={handleSetNewPassword} className="space-y-1">
+                <p className="text-sub text-sm mb-3">Choose a new password for your account.</p>
+                <div>
+                  <label className={labelCls}>New Password</label>
+                  <input type="password" className={inputCls} placeholder="••••••••"
+                    value={newPassword} onChange={e => setNewPassword(e.target.value)} disabled={resetVerifying} />
+                </div>
+                <PasswordStrengthMeter password={newPassword} />
+                <div className="pt-3">
+                  <label className={labelCls}>Confirm Password</label>
+                  <input type="password" className={inputCls} placeholder="••••••••"
+                    value={newPasswordConfirm} onChange={e => setNewPasswordConfirm(e.target.value)} disabled={resetVerifying} />
+                </div>
+                <button type="submit" disabled={resetVerifying || !getPasswordStrength(newPassword).isStrong}
+                  className="w-full py-3.5 text-white font-black text-sm uppercase tracking-widest rounded-2xl flex items-center justify-center gap-2 disabled:opacity-60 bg-cta hover:opacity-90 transition-opacity mt-4">
+                  {resetVerifying ? <Spinner size={20} /> : 'Update Password'}
+                </button>
+              </form>
+            ) : resetSent ? (
+              <form onSubmit={handleVerifyResetOtp} className="space-y-4">
+                <div className="text-center mb-1">
+                  <Mail size={36} className="text-cta mx-auto mb-2" />
+                  <p className="text-sub text-sm">
+                    Enter the code sent to <span className="font-bold text-navy">{resetEmail}</span>
+                  </p>
+                </div>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={10}
+                  placeholder="00000000"
+                  value={resetOtp}
+                  onChange={e => setResetOtp(e.target.value.replace(/\D/g, ''))}
+                  disabled={resetVerifying}
+                  className="w-full text-center text-2xl font-black tracking-[0.3em] py-3 border-2 border-border rounded-2xl focus:border-orange-400 outline-none"
+                />
+                <button type="submit" disabled={resetVerifying || resetOtp.length < 6}
+                  className="w-full py-3.5 text-white font-black text-sm uppercase tracking-widest rounded-2xl flex items-center justify-center gap-2 disabled:opacity-60 bg-cta hover:opacity-90 transition-opacity mt-1">
+                  {resetVerifying ? <Spinner size={20} /> : 'Verify Code'}
+                </button>
+                <button type="button" onClick={handleForgotPassword} disabled={resetSending} className="w-full text-center text-xs font-bold text-cta">
+                  {resetSending ? 'Sending...' : "Didn't get a code? Resend"}
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={handleForgotPassword} className="space-y-4">
+                <p className="text-sub text-sm -mt-1 mb-1">Enter your email and we'll send you a code to reset your password.</p>
+                <div>
+                  <label className={labelCls}>Email</label>
+                  <input type="email" className={inputCls} placeholder="driver@email.com"
+                    value={resetEmail} onChange={e => setResetEmail(e.target.value)} disabled={resetSending} />
+                </div>
+                <button type="submit" disabled={resetSending}
+                  className="w-full py-3.5 text-white font-black text-sm uppercase tracking-widest rounded-2xl flex items-center justify-center gap-2 disabled:opacity-60 bg-cta hover:opacity-90 transition-opacity mt-1">
+                  {resetSending ? <Spinner size={20} /> : 'Send Reset Code'}
+                </button>
+                <button type="button" onClick={() => { setForgotMode(false); setError('') }} className="w-full text-center text-sm font-bold text-sub">
+                  Back to Sign In
+                </button>
+              </form>
+            )
+          ) : (
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div>
+                <label className={labelCls}>Email</label>
+                <input type="email" className={inputCls} placeholder="driver@email.com"
+                  value={lf.email} onChange={e => setLf(p => ({ ...p, email: e.target.value }))} disabled={loading} />
+              </div>
+              <div>
+                <label className={labelCls}>Password</label>
+                <input type="password" className={inputCls} placeholder="••••••••"
+                  value={lf.password} onChange={e => setLf(p => ({ ...p, password: e.target.value }))} disabled={loading} />
+              </div>
+              <button
+                type="button"
+                onClick={() => { setForgotMode(true); setResetEmail(lf.email); setError('') }}
+                className="text-xs font-bold text-cta"
+              >
+                Forgot Password?
+              </button>
+              <p className="text-sub text-[10px] text-center">Your account must be verified by admin before first login.</p>
+              <button type="submit" disabled={loading}
+                className="w-full py-3.5 text-white font-black text-sm uppercase tracking-widest rounded-2xl flex items-center justify-center gap-2 disabled:opacity-60 bg-cta hover:opacity-90 transition-opacity mt-1">
+                {loading ? <Spinner size={20} /> : 'Sign In'}
+              </button>
+            </form>
+          )
         ) : (
           <form onSubmit={handleRegister} className="space-y-3 max-h-[65vh] overflow-y-auto pr-1">
 
