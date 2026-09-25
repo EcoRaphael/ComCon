@@ -9,6 +9,7 @@ import CameraCapture from '@/components/ui/CameraCapture'
 import NominatimAddressPicker from '@/components/ui/NominatimAddressPicker'
 import PhilippinePhoneInput from '@/components/ui/PhilippinePhoneInput'
 import AuthBackground from '@/components/ui/AuthBackground'
+import PasswordStrengthMeter, { getPasswordStrength } from '@/components/ui/PasswordStrengthMeter'
 import { supabase } from '@/lib/supabase/client'
 
 // Supabase (and network failures generally) don't always throw a plain
@@ -313,7 +314,10 @@ function CommuterPanel({ onBack, onSwitch }) {
 
   const handleSetNewPassword = async (e) => {
     e.preventDefault(); setError('')
-    if (newPassword.length < 8) { setError('Password must be at least 8 characters.'); return }
+    if (!getPasswordStrength(newPassword).isStrong) {
+      setError('Password must meet all the requirements shown below.')
+      return
+    }
     if (newPassword !== newPasswordConfirm) { setError('Passwords do not match.'); return }
     setResetVerifying(true)
     const { error: updateError } = await supabase.auth.updateUser({ password: newPassword })
@@ -328,7 +332,7 @@ function CommuterPanel({ onBack, onSwitch }) {
     e.preventDefault(); setError('')
     if (!rf.name || !rf.email || !rf.password) { setError('Name, email and password are required.'); return }
     if (!/^9\d{9}$/.test(rf.phone)) { setError('Enter a valid 10-digit Philippine mobile number (e.g. 9XX XXX XXXX).'); return }
-    if (rf.password.length < 8) { setError('Password must be at least 8 characters.'); return }
+    if (!getPasswordStrength(rf.password).isStrong) { setError('Password must meet all the requirements shown below.'); return }
     if (rf.password !== rf.confirm) { setError('Passwords do not match.'); return }
     setLoading(true)
     // Normalize to the full +63 format now, once, so every later step
@@ -492,14 +496,17 @@ function CommuterPanel({ onBack, onSwitch }) {
                 </button>
               </div>
             ) : resetVerified ? (
-              <form onSubmit={handleSetNewPassword} className="space-y-4">
-                <p className="text-sub text-sm -mt-1 mb-1">Choose a new password for your account.</p>
-                <Field label="New Password (min. 8 characters)" type="password" placeholder="••••••••" value={newPassword}
+              <form onSubmit={handleSetNewPassword} className="space-y-1">
+                <p className="text-sub text-sm mb-3">Choose a new password for your account.</p>
+                <Field label="New Password" type="password" placeholder="••••••••" value={newPassword}
                   onChange={e => setNewPassword(e.target.value)} disabled={resetVerifying} accent={accent} />
-                <Field label="Confirm Password" type="password" placeholder="••••••••" value={newPasswordConfirm}
-                  onChange={e => setNewPasswordConfirm(e.target.value)} disabled={resetVerifying} accent={accent} />
-                <button type="submit" disabled={resetVerifying}
-                  className="w-full py-3.5 text-white font-black text-sm uppercase tracking-widest rounded-2xl flex items-center justify-center gap-2 disabled:opacity-60 mt-2"
+                <PasswordStrengthMeter password={newPassword} />
+                <div className="pt-3">
+                  <Field label="Confirm Password" type="password" placeholder="••••••••" value={newPasswordConfirm}
+                    onChange={e => setNewPasswordConfirm(e.target.value)} disabled={resetVerifying} accent={accent} />
+                </div>
+                <button type="submit" disabled={resetVerifying || !getPasswordStrength(newPassword).isStrong}
+                  className="w-full py-3.5 text-white font-black text-sm uppercase tracking-widest rounded-2xl flex items-center justify-center gap-2 disabled:opacity-60 mt-4"
                   style={{ background: 'linear-gradient(135deg, #1565C0, #1976D2)' }}>
                   {resetVerifying ? <Spinner size={20} /> : 'Update Password'}
                 </button>
@@ -586,9 +593,10 @@ function CommuterPanel({ onBack, onSwitch }) {
             </div>
             <Field label="Password *" type="password" placeholder="Min. 8 characters" value={rf.password}
               onChange={e => setRf(p => ({ ...p, password: e.target.value }))} disabled={loading} accent={accent} />
+            <PasswordStrengthMeter password={rf.password} />
             <Field label="Confirm Password *" type="password" placeholder="Repeat password" value={rf.confirm}
               onChange={e => setRf(p => ({ ...p, confirm: e.target.value }))} disabled={loading} accent={accent} />
-            <button type="submit" disabled={loading}
+            <button type="submit" disabled={loading || !getPasswordStrength(rf.password).isStrong}
               className="w-full py-3.5 text-white font-black text-sm uppercase tracking-widest rounded-2xl flex items-center justify-center gap-2 disabled:opacity-60 mt-2"
               style={{ background: 'linear-gradient(135deg, #1565C0, #1976D2)' }}>
               {loading ? <Spinner size={20} /> : 'Create Account'}
