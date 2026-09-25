@@ -32,8 +32,8 @@ export default function PasswordStrengthMeter({ password }) {
   if (!password) return null
   const { checks, score } = getPasswordStrength(password)
   const label = score <= 2 ? 'Weak' : score <= 4 ? 'Medium' : 'Strong'
-  const barColor  = score <= 2 ? 'bg-red-500'   : score <= 4 ? 'bg-amber-500'  : 'bg-green-500'
-  const textColor = score <= 2 ? 'text-red-600' : score <= 4 ? 'text-amber-600' : 'text-green-600'
+  const barColor  = score <= 2 ? 'bg-red-500'   : score <= 4 ? 'bg-amber-500'  : 'bg-green'
+  const textColor = score <= 2 ? 'text-red-600' : score <= 4 ? 'text-amber-600' : 'text-green'
 
   return (
     <div className="mt-2">
@@ -46,7 +46,7 @@ export default function PasswordStrengthMeter({ password }) {
       <div className="grid grid-cols-2 gap-x-3 gap-y-1">
         {REQUIREMENTS.map(({ key, label: reqLabel }) => (
           <div key={key} className="flex items-center gap-1.5">
-            <span className={`w-3 h-3 rounded-full flex-shrink-0 ${checks[key] ? 'bg-green-500' : 'bg-border'}`} />
+            <span className={`w-3 h-3 rounded-full flex-shrink-0 ${checks[key] ? 'bg-green' : 'bg-border'}`} />
             <span className={`text-[10px] ${checks[key] ? 'text-navy' : 'text-sub'}`}>{reqLabel}</span>
           </div>
         ))}
