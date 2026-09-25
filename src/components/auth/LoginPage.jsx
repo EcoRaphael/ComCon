@@ -654,6 +654,8 @@ function DriverPanel({ onBack, onSwitch }) {
   const [newPassword, setNewPassword] = useState('')
   const [newPasswordConfirm, setNewPasswordConfirm] = useState('')
   const [showRegPassword, setShowRegPassword] = useState(false)
+  const [showRegConfirm, setShowRegConfirm] = useState(false)
+  const [showLoginPassword, setShowLoginPassword] = useState(false)
 
   const handleForgotPassword = async (e) => {
     e.preventDefault(); setError('')
@@ -1040,8 +1042,15 @@ function DriverPanel({ onBack, onSwitch }) {
               </div>
               <div>
                 <label className={labelCls}>Password</label>
-                <input type="password" className={inputCls} placeholder="••••••••"
-                  value={lf.password} onChange={e => setLf(p => ({ ...p, password: e.target.value }))} disabled={loading} />
+                <div className="relative">
+                  <input type={showLoginPassword ? 'text' : 'password'} className={`${inputCls} pr-11`} placeholder="••••••••"
+                    value={lf.password} onChange={e => setLf(p => ({ ...p, password: e.target.value }))} disabled={loading} />
+                  <button type="button" tabIndex={-1}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-sub p-1"
+                    onClick={() => setShowLoginPassword(s => !s)}>
+                    {showLoginPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
               </div>
               <button
                 type="button"
@@ -1181,11 +1190,12 @@ function DriverPanel({ onBack, onSwitch }) {
             <div>
               <label className={labelCls}>Password *</label>
               <div className="relative">
-                <input type={showRegPassword ? 'text' : 'password'} className={`${inputCls} pr-10`} placeholder="••••••••"
+                <input type={showRegPassword ? 'text' : 'password'} className={`${inputCls} pr-11`} placeholder="••••••••"
                   value={rf.password} onChange={e => setRf(p => ({ ...p, password: e.target.value }))} disabled={loading} />
-                <button type="button" onClick={() => setShowRegPassword(s => !s)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-sub hover:text-navy">
-                  {showRegPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                <button type="button" tabIndex={-1}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-sub p-1"
+                  onClick={() => setShowRegPassword(s => !s)}>
+                  {showRegPassword ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
               </div>
             </div>
@@ -1193,11 +1203,12 @@ function DriverPanel({ onBack, onSwitch }) {
             <div>
               <label className={labelCls}>Confirm Password *</label>
               <div className="relative">
-                <input type={showRegPassword ? 'text' : 'password'} className={`${inputCls} pr-10`} placeholder="Repeat password"
+                <input type={showRegConfirm ? 'text' : 'password'} className={`${inputCls} pr-11`} placeholder="Repeat password"
                   value={rf.confirm} onChange={e => setRf(p => ({ ...p, confirm: e.target.value }))} disabled={loading} />
-                <button type="button" onClick={() => setShowRegPassword(s => !s)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-sub hover:text-navy">
-                  {showRegPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                <button type="button" tabIndex={-1}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-sub p-1"
+                  onClick={() => setShowRegConfirm(s => !s)}>
+                  {showRegConfirm ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
               </div>
             </div>
