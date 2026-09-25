@@ -802,7 +802,7 @@ function DriverPanel({ onBack, onSwitch }) {
     e.preventDefault(); setError('')
     if (!rf.name || !rf.email || !rf.password || !rf.vehicleType)
       return setError('Name, email, password, and vehicle type are required.')
-    if (rf.password.length < 8) return setError('Password must be at least 8 characters.')
+    if (!getPasswordStrength(rf.password).isStrong) return setError('Password must meet all the requirements shown below.')
     if (rf.password !== rf.confirm) return setError('Passwords do not match.')
     if (rf.paymentMethods.length === 0)
       return setError('Select at least one payment method you accept (Cash, GCash, or Maya).')
@@ -1178,17 +1178,18 @@ function DriverPanel({ onBack, onSwitch }) {
 
             <p className="text-[10px] font-black uppercase tracking-widest text-cta border-b border-orange-100 pb-1 pt-1">Account</p>
             <div>
-              <label className={labelCls}>Password * (min. 8 chars)</label>
+              <label className={labelCls}>Password *</label>
               <input type="password" className={inputCls} placeholder="••••••••"
                 value={rf.password} onChange={e => setRf(p => ({ ...p, password: e.target.value }))} disabled={loading} />
             </div>
+            <PasswordStrengthMeter password={rf.password} />
             <div>
               <label className={labelCls}>Confirm Password *</label>
               <input type="password" className={inputCls} placeholder="Repeat password"
                 value={rf.confirm} onChange={e => setRf(p => ({ ...p, confirm: e.target.value }))} disabled={loading} />
             </div>
 
-            <button type="submit" disabled={loading}
+            <button type="submit" disabled={loading || !getPasswordStrength(rf.password).isStrong}
               className="w-full py-3.5 text-white font-black text-sm uppercase tracking-widest rounded-2xl flex items-center justify-center gap-2 disabled:opacity-60 bg-cta hover:opacity-90 transition-opacity">
               {loading ? <Spinner size={20} /> : 'Submit Application'}
             </button>
