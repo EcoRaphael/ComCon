@@ -1,5 +1,6 @@
 // src/components/pages/MyRides.jsx
 import { useState, useEffect } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/lib/AuthContext'
 import { useToast } from '@/lib/ToastContext'
@@ -34,6 +35,8 @@ function StarRating({ value, onChange }) {
 export default function MyRides() {
   const { profile } = useAuth()
   const { toast }   = useToast()
+  const location = useLocation()
+  const navigate = useNavigate()
 
   const [bookings,  setBookings]  = useState([])
   const [loading,   setLoading]   = useState(true)
@@ -51,7 +54,7 @@ export default function MyRides() {
 
   // Report modal
   const [reportTarget,     setReportTarget]     = useState(null)
-  const [reportType,       setReportType]       = useState('')
+  const [reportType,       setReportType]       = useState([])
   const [reportDesc,       setReportDesc]       = useState('')
   const [submittingReport, setSubmittingReport] = useState(false)
 
@@ -68,6 +71,24 @@ export default function MyRides() {
       .subscribe()
     return () => supabase.removeChannel(ch)
   }, [profile?.id])
+
+  // Auto-opens the rating modal when arriving here from a "Ride
+  // Completed" notification tap (see NotificationBell.jsx) — waits for
+  // bookings to actually be loaded first, since the target booking has
+  // to exist in the fetched list before it can be set as the rating
+  // target. Clears the navigation state afterward so browsing back to
+  // this page later doesn't keep re-opening the same modal.
+  useEffect(() => {
+    const targetId = location.state?.openRatingForBookingId
+    if (!targetId || bookings.length === 0) return
+    const match = bookings.find(b => b.id === targetId)
+    if (match) {
+      setRatingTarget(match)
+      setStars(0)
+      setComment('')
+    }
+    navigate(location.pathname, { replace: true, state: {} })
+  }, [bookings, location.state])
 
   async function fetchBookings() {
     setLoading(true)
@@ -119,13 +140,22 @@ export default function MyRides() {
   }
 
   async function handleReport() {
-    if (!reportType) { toast('Please select an issue type', 'error'); return }
+    if (reportType.length === 0) { toast('Please select at least one issue type', 'error'); return }
     if (!reportDesc.trim()) { toast('Please describe the issue', 'error'); return }
     setSubmittingReport(true)
     try {
+      // One report per ride, not one report per driver ever — a
+      // commuter can still report the same driver again on a later,
+      // different ride, just not file multiple reports against the
+      // same single completed trip.
+      const { data: existing } = await supabase
+        .from('reports').select('id').eq('booking_id', reportTarget.id).maybeSingle()
+      if (existing) { toast('You already reported this ride.'); setReportTarget(null); return }
+
       const { error } = await supabase.from('reports').insert({
         customer_id: profile.id,
         driver_id:   reportTarget.drivers?.id || null,
+        booking_id:  reportTarget.id,
         issue_type:  reportType,
         description: reportDesc.trim(),
         severity:    'Medium',
@@ -133,7 +163,7 @@ export default function MyRides() {
       })
       if (error) throw error
       toast('Report submitted. Thank you!', 'success')
-      setReportTarget(null); setReportType(''); setReportDesc('')
+      setReportTarget(null); setReportType([]); setReportDesc('')
     } catch (err) {
       toast('Failed to submit report: ' + err.message, 'error')
     } finally {
@@ -227,7 +257,7 @@ export default function MyRides() {
                       className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-amber-200 text-amber-700 text-xs font-bold hover:bg-amber-50 transition-colors">
                       <Star size={14} /> Rate
                     </button>
-                    <button onClick={() => { setReportTarget(b); setReportType(''); setReportDesc('') }}
+                    <button onClick={() => { setReportTarget(b); setReportType([]); setReportDesc('') }}
                       className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-red-200 text-red-600 text-xs font-bold hover:bg-red-50 transition-colors">
                       <Flag size={14} /> Report
                     </button>
@@ -320,16 +350,20 @@ export default function MyRides() {
               </div>
             )}
             <div className="mb-4">
-              <label className="field-label">Issue Type *</label>
+              <label className="field-label">Issue Type * (select all that apply)</label>
               <div className="grid grid-cols-2 gap-2">
-                {['Overcharging','Reckless Driving','Discourtesy','No Show','Wrong Route','Other'].map(t => (
-                  <button key={t} onClick={() => setReportType(t)} type="button"
-                    className={`py-2.5 px-3 rounded-xl border-2 text-xs font-bold transition-all text-left ${
-                      reportType === t ? 'border-red-400 bg-red-50 text-red-700' : 'border-border text-sub hover:border-red-200'
-                    }`}>
-                    {t}
-                  </button>
-                ))}
+                {['Overcharging','Reckless Driving','Discourtesy','No Show','Wrong Route','Other'].map(t => {
+                  const selected = reportType.includes(t)
+                  return (
+                    <button key={t} type="button"
+                      onClick={() => setReportType(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t])}
+                      className={`py-2.5 px-3 rounded-xl border-2 text-xs font-bold transition-all text-left ${
+                        selected ? 'border-red-400 bg-red-50 text-red-700' : 'border-border text-sub hover:border-red-200'
+                      }`}>
+                      {t}
+                    </button>
+                  )
+                })}
               </div>
             </div>
             <div className="mb-5">
@@ -338,7 +372,7 @@ export default function MyRides() {
                 placeholder="What happened? Please be specific..."
                 value={reportDesc} onChange={e => setReportDesc(e.target.value)} />
             </div>
-            <button onClick={handleReport} disabled={submittingReport || !reportType || !reportDesc.trim()}
+            <button onClick={handleReport} disabled={submittingReport || reportType.length === 0 || !reportDesc.trim()}
               className="w-full py-4 rounded-2xl bg-red-500 text-white font-bold flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95 transition-all">
               {submittingReport ? <Spinner size={20} /> : <><AlertTriangle size={18} /> Submit Report</>}
             </button>

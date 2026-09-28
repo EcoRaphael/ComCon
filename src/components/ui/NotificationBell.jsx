@@ -6,6 +6,7 @@
 // `bottomOffset` lets a screen with its own floating button (e.g. Home's
 // "Where are you going?" pill) push this bell up so they don't overlap.
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Bell, X, Clock, CheckCheck, ShieldAlert, Megaphone } from 'lucide-react'
 import { useAuth } from '@/lib/AuthContext'
 import { supabase } from '@/lib/supabase/client'
@@ -27,6 +28,7 @@ const TYPE_COLORS = {
 
 export default function NotificationBell({ bottomOffset = 96 }) {
   const { profile } = useAuth()
+  const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
@@ -91,6 +93,19 @@ export default function NotificationBell({ bottomOffset = 96 }) {
     }
   }
 
+  // "Ride Completed" is the exact, fixed title the booking-notifications
+  // DB trigger always uses for this case (see
+  // booking_notifications_trigger.sql) — reliable to match on directly,
+  // since notifications don't have a separate "subtype" field to check
+  // instead. Any other notification just marks as read, same as before.
+  function handleNotificationClick(n) {
+    if (!n.is_read) markAsRead(n.id)
+    if (n.title === 'Ride Completed' && n.booking_id) {
+      setOpen(false)
+      navigate('/my-rides', { state: { openRatingForBookingId: n.booking_id } })
+    }
+  }
+
   if (!profile?.id) return null
 
   return (
@@ -136,7 +151,7 @@ export default function NotificationBell({ bottomOffset = 96 }) {
               items.map(n => (
                 <button
                   key={n.id}
-                  onClick={() => !n.is_read && markAsRead(n.id)}
+                  onClick={() => handleNotificationClick(n)}
                   className={`w-full text-left px-4 py-3 border-b border-border last:border-0 hover:bg-surface transition-colors flex gap-3 ${!n.is_read ? 'bg-green-light/20' : ''}`}
                 >
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${TYPE_COLORS[n.type] || TYPE_COLORS.system}`}>
@@ -145,9 +160,9 @@ export default function NotificationBell({ bottomOffset = 96 }) {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
                       {!n.is_read && <span className="w-1.5 h-1.5 rounded-full bg-cta flex-shrink-0" />}
-                      <p className="font-bold text-navy text-xs truncate">{n.title}</p>
+                      <p className="font-bold text-navy text-xs">{n.title}</p>
                     </div>
-                    <p className="text-sub text-xs mt-0.5 line-clamp-2">{n.message}</p>
+                    <p className="text-sub text-xs mt-0.5">{n.message}</p>
                     <p className="text-[10px] text-sub/70 mt-1">
                       {new Date(n.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                     </p>

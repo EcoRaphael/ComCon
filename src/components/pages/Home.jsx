@@ -32,6 +32,7 @@ export default function Home() {
   const navigate    = useNavigate()
 
   const [activeBooking,  setActiveBooking]  = useState(null)
+  const [driverLivePosition, setDriverLivePosition] = useState(null)
   const [recentBookings, setRecentBookings] = useState([])
   const [fareMatrix,     setFareMatrix]     = useState([])
   const [loading,        setLoading]        = useState(true)
@@ -55,11 +56,40 @@ export default function Home() {
     return () => supabase.removeChannel(ch)
   }, [profile?.id])
 
+  // Live driver position — only meaningful while there's an active
+  // (pending/ongoing) booking with a driver assigned. Seeds from the
+  // driver's last-known position (already fetched with the booking) so
+  // something shows immediately, then updates live as the driver's
+  // dashboard pushes new coordinates while they're online (see
+  // DriverDashboard.jsx's geolocation watcher).
+  useEffect(() => {
+    const driverId = activeBooking?.drivers?.id
+    if (!driverId) { setDriverLivePosition(null); return }
+
+    const d = activeBooking.drivers
+    setDriverLivePosition(
+      d.latitude && d.longitude ? { lat: d.latitude, lng: d.longitude } : null
+    )
+
+    const ch = supabase
+      .channel(`home-driver-position-${driverId}`)
+      .on('postgres_changes', {
+        event: 'UPDATE', schema: 'public', table: 'drivers',
+        filter: `id=eq.${driverId}`,
+      }, payload => {
+        if (payload.new.latitude && payload.new.longitude) {
+          setDriverLivePosition({ lat: payload.new.latitude, lng: payload.new.longitude })
+        }
+      })
+      .subscribe()
+    return () => supabase.removeChannel(ch)
+  }, [activeBooking?.drivers?.id])
+
   async function fetchData() {
     setLoading(true)
     const [bookingsRes, fareRes, allBookingsRes, reportsRes, ratingsRes] = await Promise.all([
       supabase.from('bookings')
-        .select('*, drivers!driver_id(name, plate, vehicle_type, rating, color, user_id, payment_methods)')
+        .select('*, drivers!driver_id(id, name, plate, vehicle_type, rating, color, user_id, payment_methods, latitude, longitude)')
         .eq('customer_id', profile.id)
         .order('created_at', { ascending: false })
         .limit(10),
@@ -176,7 +206,7 @@ export default function Home() {
               </div>
 
               {/* Pickup → dropoff preview map (static, not live-tracked yet) */}
-              <RideMap pickup={activeBooking.pickup} dropoff={activeBooking.dropoff} height={130} className="mb-3" />
+              <RideMap pickup={activeBooking.pickup} dropoff={activeBooking.dropoff} driverLivePosition={driverLivePosition} height={130} className="mb-3" />
               {/* Driver info */}
               {activeBooking.drivers && (
                 <div className="bg-surface rounded-xl p-2.5 space-y-2">

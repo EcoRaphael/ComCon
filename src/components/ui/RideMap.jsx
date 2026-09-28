@@ -1,8 +1,20 @@
 // src/components/ui/RideMap.jsx
-// Interactive pickup → dropoff map for a single ride. Drag/zoom/pinch are
-// enabled (this is the "whole map" people can explore, not just a fixed
-// snapshot); mouse-wheel zoom stays off so it doesn't hijack page scroll
-// when embedded inside a scrollable card list.
+// Interactive map for a single ride. Two modes:
+// - Default: static pickup → dropoff pins + route line (used for
+//   historical/completed rides, and on the driver's side, where seeing
+//   the commuter's pickup point and destination is what's actually
+//   useful — a driver doesn't need to see their own live position on
+//   their own map).
+// - Live tracking (driverLivePosition prop): replaces the pickup/dropoff
+//   view entirely with the driver's real-time moving position, for a
+//   commuter's currently-active ride specifically. Only meaningful while
+//   a ride is actually ongoing — a completed ride has no "live" position
+//   to show anymore, which is why this is an opt-in prop rather than
+//   always-on behavior.
+//
+// Drag/zoom/pinch are enabled (this is the "whole map" people can
+// explore, not just a fixed snapshot); mouse-wheel zoom stays off so it
+// doesn't hijack page scroll when embedded inside a scrollable card list.
 import { MapContainer, TileLayer, LayersControl, Marker, Popup, Polyline, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { useEffect, useRef } from 'react'
@@ -19,6 +31,20 @@ const pin = (color) => L.divIcon({
   </div>`,
   iconSize: [14, 14],
   iconAnchor: [7, 7],
+})
+
+// Pulsing ring (via the ridemap-pulse keyframe below) visually signals
+// "this is live/moving," distinct from the static pickup/dropoff pins.
+const liveDriverIcon = () => L.divIcon({
+  className: 'ridemap-live-driver',
+  html: `
+    <div style="position:relative;width:22px;height:22px;">
+      <div style="position:absolute;inset:0;background:#2E7D32;border-radius:50%;opacity:0.35;animation:ridemap-pulse 1.6s ease-out infinite;"></div>
+      <div style="position:absolute;inset:5px;background:#2E7D32;border-radius:50%;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.5);"></div>
+    </div>
+  `,
+  iconSize: [22, 22],
+  iconAnchor: [11, 11],
 })
 
 const findCoords = (name) => {
@@ -65,13 +91,18 @@ function RecenterButton({ points }) {
   )
 }
 
-export default function RideMap({ pickup, dropoff, height = 160, className = '' }) {
-  const pickupCoords  = findCoords(pickup)
-  const dropoffCoords  = findCoords(dropoff)
-  const points = [pickupCoords, dropoffCoords].filter(Boolean)
+export default function RideMap({ pickup, dropoff, driverLivePosition, height = 160, className = '' }) {
+  const liveMode = !!driverLivePosition
 
-  // If neither landmark resolved (custom/unknown pickup text), don't
-  // render a misleading map centered on nothing meaningful.
+  const pickupCoords  = findCoords(pickup)
+  const dropoffCoords = findCoords(dropoff)
+  const points = liveMode
+    ? [[driverLivePosition.lat, driverLivePosition.lng]]
+    : [pickupCoords, dropoffCoords].filter(Boolean)
+
+  // If neither landmark resolved (custom/unknown pickup text) and we're
+  // not in live mode either, don't render a misleading map centered on
+  // nothing meaningful.
   if (points.length === 0) return null
 
   return (
@@ -80,6 +111,12 @@ export default function RideMap({ pickup, dropoff, height = 160, className = '' 
       style={{ height }}
       onClick={(e) => e.stopPropagation()}
     >
+      <style>{`
+        @keyframes ridemap-pulse {
+          0%   { transform: scale(1);   opacity: 0.4; }
+          100% { transform: scale(2.4); opacity: 0; }
+        }
+      `}</style>
       <MapContainer
         center={points[0] || CALBAYOG_CENTER}
         zoom={14}
@@ -107,19 +144,26 @@ export default function RideMap({ pickup, dropoff, height = 160, className = '' 
         <FitBounds points={points} />
         <RecenterButton points={points} />
 
-        {points.length === 2 && (
-          <Polyline positions={points} pathOptions={{ color: '#2E7D32', weight: 3, dashArray: '6 6' }} />
-        )}
-
-        {pickupCoords && (
-          <Marker position={pickupCoords} icon={pin('#2E7D32')}>
-            <Popup>Pickup: {pickup}</Popup>
+        {liveMode ? (
+          <Marker position={points[0]} icon={liveDriverIcon()}>
+            <Popup>Your driver is here</Popup>
           </Marker>
-        )}
-        {dropoffCoords && (
-          <Marker position={dropoffCoords} icon={pin('#E64A19')}>
-            <Popup>Dropoff: {dropoff}</Popup>
-          </Marker>
+        ) : (
+          <>
+            {points.length === 2 && (
+              <Polyline positions={points} pathOptions={{ color: '#2E7D32', weight: 3, dashArray: '6 6' }} />
+            )}
+            {pickupCoords && (
+              <Marker position={pickupCoords} icon={pin('#2E7D32')}>
+                <Popup>Pickup: {pickup}</Popup>
+              </Marker>
+            )}
+            {dropoffCoords && (
+              <Marker position={dropoffCoords} icon={pin('#E64A19')}>
+                <Popup>Dropoff: {dropoff}</Popup>
+              </Marker>
+            )}
+          </>
         )}
       </MapContainer>
     </div>
