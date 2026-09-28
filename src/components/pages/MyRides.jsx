@@ -1,5 +1,6 @@
 // src/components/pages/MyRides.jsx
 import { useState, useEffect } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/lib/AuthContext'
 import { useToast } from '@/lib/ToastContext'
@@ -34,6 +35,8 @@ function StarRating({ value, onChange }) {
 export default function MyRides() {
   const { profile } = useAuth()
   const { toast }   = useToast()
+  const location = useLocation()
+  const navigate = useNavigate()
 
   const [bookings,  setBookings]  = useState([])
   const [loading,   setLoading]   = useState(true)
@@ -68,6 +71,24 @@ export default function MyRides() {
       .subscribe()
     return () => supabase.removeChannel(ch)
   }, [profile?.id])
+
+  // Auto-opens the rating modal when arriving here from a "Ride
+  // Completed" notification tap (see NotificationBell.jsx) — waits for
+  // bookings to actually be loaded first, since the target booking has
+  // to exist in the fetched list before it can be set as the rating
+  // target. Clears the navigation state afterward so browsing back to
+  // this page later doesn't keep re-opening the same modal.
+  useEffect(() => {
+    const targetId = location.state?.openRatingForBookingId
+    if (!targetId || bookings.length === 0) return
+    const match = bookings.find(b => b.id === targetId)
+    if (match) {
+      setRatingTarget(match)
+      setStars(0)
+      setComment('')
+    }
+    navigate(location.pathname, { replace: true, state: {} })
+  }, [bookings, location.state])
 
   async function fetchBookings() {
     setLoading(true)
