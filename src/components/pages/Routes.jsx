@@ -4,9 +4,10 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/lib/AuthContext'
 import { useToast } from '@/lib/ToastContext'
-import { Search, MapPin, ArrowRight, Car, Bus, ChevronRight, X, User, CreditCard } from 'lucide-react'
+import { Search, MapPin, ArrowRight, Car, Bus, ChevronRight, X, User, CreditCard, LocateFixed } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
 import LocationPicker from '@/components/ui/LocationPicker'
+import CurrentLocationPicker from '@/components/ui/CurrentLocationPicker'
 import UserAvatar from '@/components/ui/UserAvatar'
 import PaymentMethodBadges from '@/components/ui/PaymentMethodBadges'
 
@@ -35,6 +36,13 @@ export default function RoutesPage() {
   const [selected, setSelected] = useState(null)   // selected route
   const [pickup, setPickup] = useState('')     // custom pickup landmark
   const [dropoff, setDropoff] = useState('')     // custom dropoff landmark
+  // Pickup can come from the landmark list ('list') or the device's GPS
+  // ('gps'). prevPickup remembers what was there so "Choose a place
+  // instead" can restore it; pickupGps is set only once the person has
+  // confirmed a GPS location, and Continue waits for it.
+  const [pickupMode, setPickupMode] = useState('list')
+  const [prevPickup, setPrevPickup] = useState('')
+  const [pickupGps, setPickupGps]   = useState(null)
   // Pre-filled when arriving from Home.jsx's fare-rate cards (tapping a
   // specific vehicle type there skips re-picking it here) — otherwise
   // starts empty as before.
@@ -128,12 +136,14 @@ export default function RoutesPage() {
     // Pre-fill pickup/dropoff from route origin/destination
     setPickup(route.origin)
     setDropoff(route.destination)
+    setPickupMode('list'); setPickupGps(null)
     setStep('location')
   }
 
   const closeModal = () => {
     setStep(null); setSelected(null)
     setPickup(''); setDropoff('')
+    setPickupMode('list'); setPickupGps(null)
     setVehicle(''); setDriver(null)
   }
 
@@ -245,12 +255,33 @@ export default function RoutesPage() {
                   📍 Select your exact pickup and dropoff points in Calbayog City
                 </div>
 
-                <LocationPicker
-                  label="Pickup Location"
-                  placeholder="Where will you be picked up?"
-                  value={pickup}
-                  onChange={setPickup}
-                />
+                {pickupMode === 'gps' ? (
+                  <div>
+                    <label className="field-label">Pickup Location</label>
+                    <CurrentLocationPicker
+                      onConfirm={(loc) => {
+                        if (loc) { setPickup(loc.address); setPickupGps(loc) }
+                        else setPickupGps(null)   // pin moved / re-locating: not confirmed any more
+                      }}
+                      onCancel={() => { setPickup(prevPickup); setPickupGps(null); setPickupMode('list') }}
+                    />
+                  </div>
+                ) : (
+                  <div>
+                    <LocationPicker
+                      label="Pickup Location"
+                      placeholder="Where will you be picked up?"
+                      value={pickup}
+                      onChange={setPickup}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => { setPrevPickup(pickup); setPickupGps(null); setPickupMode('gps') }}
+                      className="mt-2 text-xs font-bold text-green flex items-center gap-1.5">
+                      <LocateFixed size={14} /> Use my current location
+                    </button>
+                  </div>
+                )}
 
                 <LocationPicker
                   label="Dropoff Location"
@@ -261,7 +292,7 @@ export default function RoutesPage() {
 
                 <button
                   onClick={() => setStep(vehicle ? 'select-driver' : 'select-vehicle')}
-                  disabled={!pickup || !dropoff}
+                  disabled={!pickup || !dropoff || (pickupMode === 'gps' && !pickupGps)}
                   className="btn-primary w-full py-3.5 flex items-center justify-center gap-2 disabled:opacity-40">
                   Continue →
                 </button>
@@ -528,4 +559,4 @@ export default function RoutesPage() {
       )}
     </div>
   )
-}
+} 
