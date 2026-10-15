@@ -34,7 +34,7 @@ function FollowPin({ lat, lng }) {
   return null
 }
 
-export default function CurrentLocationPicker({ onConfirm, onCancel }) {
+export default function CurrentLocationPicker({ onConfirm, onCancel, purpose = 'pickup' }) {
   const [status, setStatus] = useState('locating')   // locating | geocoding | ready | error
   const [pos, setPos] = useState(null)               // { lat, lng, accuracy | null }
   const [address, setAddress] = useState('')
@@ -223,7 +223,7 @@ export default function CurrentLocationPicker({ onConfirm, onCancel }) {
             )}
             {confirmed && (
               <p className="text-[11px] font-bold text-green flex items-center gap-1.5">
-                <CheckCircle2 size={14} /> Selected as your pickup
+                <CheckCircle2 size={14} /> Selected as your {purpose}
               </p>
             )}
 

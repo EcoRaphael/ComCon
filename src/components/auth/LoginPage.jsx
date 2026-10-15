@@ -157,6 +157,26 @@ function RoleSelector({ onSelect }) {
 }
 
 // ── Shared field helpers ────────────────────────────────────────
+// Blocks obviously-fake/testing/disposable domains at registration —
+// not a Gmail-only restriction, any genuine email provider is fine.
+// Covers common testing conventions (test.com, example.com — RFC 2606
+// reserved domains meant specifically for documentation/testing, never
+// real mail) plus well-known disposable/temporary email services people
+// sometimes use to bypass signup requirements.
+const BLOCKED_EMAIL_DOMAINS = [
+  'test.com', 'test.org', 'test.net', 'test.test',
+  'example.com', 'example.org', 'example.net',
+  'fake.com', 'fakeinbox.com', 'trashmail.com',
+  'mailinator.com', 'guerrillamail.com', 'yopmail.com',
+  '10minutemail.com', 'tempmail.com', 'throwaway.email',
+]
+
+function isBlockedEmail(email) {
+  const domain = email?.split('@')[1]?.toLowerCase().trim()
+  if (!domain) return true // no domain at all — malformed
+  return BLOCKED_EMAIL_DOMAINS.includes(domain)
+}
+
 function Field({ label, type = 'text', placeholder, value, onChange, disabled, accent }) {
   const [show, setShow] = useState(false)
   const isPass = type === 'password'
@@ -331,6 +351,7 @@ function CommuterPanel({ onBack, onSwitch }) {
   const handleRegister = async (e) => {
     e.preventDefault(); setError('')
     if (!rf.name || !rf.email || !rf.password) { setError('Name, email and password are required.'); return }
+    if (isBlockedEmail(rf.email)) { setError('Please use a real email address — testing or disposable domains are not accepted.'); return }
     if (!/^9\d{9}$/.test(rf.phone)) { setError('Enter a valid 10-digit Philippine mobile number (e.g. 9XX XXX XXXX).'); return }
     if (!getPasswordStrength(rf.password).isStrong) { setError('Password must meet all the requirements shown below.'); return }
     if (rf.password !== rf.confirm) { setError('Passwords do not match.'); return }
@@ -805,6 +826,7 @@ function DriverPanel({ onBack, onSwitch }) {
     e.preventDefault(); setError('')
     if (!rf.name || !rf.email || !rf.password || !rf.vehicleType)
       return setError('Name, email, password, and vehicle type are required.')
+    if (isBlockedEmail(rf.email)) return setError('Please use a real email address — testing or disposable domains are not accepted.')
     if (!getPasswordStrength(rf.password).isStrong) return setError('Password must meet all the requirements shown below.')
     if (rf.password !== rf.confirm) return setError('Passwords do not match.')
     if (rf.paymentMethods.length === 0)
@@ -824,6 +846,10 @@ function DriverPanel({ onBack, onSwitch }) {
         options: { data: { name: rf.name.trim(), role: 'driver' } },
       })
       if (signUpError) throw signUpError
+      // Same silent-duplicate case as the commuter signup (see AuthContext.startSignUp)
+      if (Array.isArray(authData?.user?.identities) && authData.user.identities.length === 0) {
+        throw new Error('This email is already registered. Sign in instead, or use a different email.')
+      }
       const userId = authData?.user?.id
       if (!userId) throw new Error('Signup failed — no user ID.')
 
@@ -1088,6 +1114,7 @@ function DriverPanel({ onBack, onSwitch }) {
             <div>
               <label className={labelCls}>Address</label>
               <NominatimAddressPicker
+                accentClass="text-cta"
                 value={{ address: rf.address }}
                 onChange={val => setRf(p => ({ ...p, address: val.address, addressLat: val.lat, addressLng: val.lng }))}
                 disabled={loading}
