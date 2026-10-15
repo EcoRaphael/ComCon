@@ -21,17 +21,27 @@
 // than calling the public instance directly from every user's browser —
 // worth revisiting before any large-scale beneficiary rollout.
 import { useState, useRef, useEffect } from 'react'
-import { MapPin, Search, X, Loader2 } from 'lucide-react'
+import { MapPin, Search, X, Loader2, LocateFixed } from 'lucide-react'
+import CurrentLocationPicker from '@/components/ui/CurrentLocationPicker'
 
 // Calbayog City bounding box — biases results, doesn't hard-restrict.
-const VIEWBOX = '124.2415,12.3394,124.8426,11.9653' // west,north,east,south
+const VIEWBOX = '124.50,12.15,124.65,12.00' // west,north,east,south
 
-export default function NominatimAddressPicker({ value, onChange, placeholder = 'Search your address...', disabled }) {
+// allowCurrentLocation adds a "Use my current location" option under the search box:
+// GPS -> reverse-geocoded address -> map with an adjustable pin, delivered
+// through the same onChange({ address, lat, lng }) as a searched result.
+// accentClass colours that link to match the form it sits in.
+export default function NominatimAddressPicker({ value, onChange, placeholder = 'Search your address...', disabled, allowCurrentLocation = true, accentClass = 'text-green' }) {
   const [query, setQuery] = useState(value?.address || '')
   const [results, setResults] = useState([])
   const [loading, setLoading] = useState(false)
   const [open, setOpen] = useState(false)
+  const [gpsOpen, setGpsOpen] = useState(false)
 
+  // The last address picked from the SEARCH list (with its coordinates), so
+  // backing out of the GPS option can restore it — the parent forms only
+  // hold the address text, not the coordinates, in `value`.
+  const lastPickedRef = useRef(null)
   const wrapRef = useRef(null)
   const debounceRef = useRef(null)
   const abortRef = useRef(null)
@@ -81,6 +91,11 @@ export default function NominatimAddressPicker({ value, onChange, placeholder = 
   }
 
   const handleSelect = (result) => {
+    lastPickedRef.current = {
+      address: result.display_name,
+      lat: parseFloat(result.lat),
+      lng: parseFloat(result.lon),
+    }
     onChange({
       address: result.display_name,
       lat: parseFloat(result.lat),
@@ -104,6 +119,30 @@ export default function NominatimAddressPicker({ value, onChange, placeholder = 
     }
   }, [open])
 
+  const openGps = () => { setOpen(false); setResults([]); setGpsOpen(true) }
+
+  const closeGps = () => {
+    setGpsOpen(false)
+    const prev = lastPickedRef.current
+    if (prev) { onChange(prev); setQuery(prev.address) }
+    else { setQuery(''); onChange({ address: '', lat: null, lng: null }) }
+  }
+
+  // loc === null means the pin moved or a new GPS reading started, so the
+  // address on the form is cleared until the person confirms again.
+  const handleGpsConfirm = (loc) => {
+    if (loc) { onChange({ address: loc.address, lat: loc.lat, lng: loc.lng }); setQuery(loc.address) }
+    else onChange({ address: '', lat: null, lng: null })
+  }
+
+  if (gpsOpen) {
+    return (
+      <div className="mt-1.5">
+        <CurrentLocationPicker purpose="address" onConfirm={handleGpsConfirm} onCancel={closeGps} />
+      </div>
+    )
+  }
+
   return (
     <div className="relative mt-1.5" ref={wrapRef}>
       <div className="relative">
@@ -120,7 +159,7 @@ export default function NominatimAddressPicker({ value, onChange, placeholder = 
         {!loading && query && (
           <button
             type="button"
-            onClick={() => { setQuery(''); onChange({ address: '', lat: null, lng: null }); setResults([]) }}
+            onClick={() => { setQuery(''); lastPickedRef.current = null; onChange({ address: '', lat: null, lng: null }); setResults([]) }}
             className="absolute right-3 top-1/2 -translate-y-1/2 text-sub"
           >
             <X size={14} />
@@ -148,6 +187,16 @@ export default function NominatimAddressPicker({ value, onChange, placeholder = 
             ))
           )}
         </div>
+      )}
+
+      {allowCurrentLocation && !disabled && (
+        <button
+          type="button"
+          onClick={openGps}
+          className={`mt-2 text-xs font-bold flex items-center gap-1.5 ${accentClass}`}
+        >
+          <LocateFixed size={14} /> Use my current location
+        </button>
       )}
     </div>
   )
