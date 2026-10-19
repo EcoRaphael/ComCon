@@ -1,18 +1,12 @@
 // src/components/pages/CityMap.jsx
 import { useState, useEffect } from 'react'
-import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/lib/AuthContext'
 import { supabase } from '@/lib/supabase/client'
 import CityMapView from '@/components/ui/CityMapView'
-import LandmarkEditor from '@/components/ui/LandmarkEditor'
 import Spinner from '@/components/ui/Spinner'
 
 export default function CityMap() {
   const { profile } = useAuth()
-  // Add ?edit=landmarks to this page's address to open the pin editor
-  // (see LandmarkEditor.jsx). Regular visits never see it.
-  const [searchParams] = useSearchParams()
-  const editingLandmarks = searchParams.get('edit') === 'landmarks'
   const [activeBooking, setActiveBooking] = useState(null)
   const [loading, setLoading] = useState(true)
 
@@ -33,15 +27,6 @@ export default function CityMap() {
       .maybeSingle()
     setActiveBooking(data || null)
     setLoading(false)
-  }
-
-  if (editingLandmarks) {
-    return (
-      <div className="page-enter px-4 py-4">
-        <h2 className="font-black text-navy text-lg mb-3">Landmark pin editor</h2>
-        <LandmarkEditor />
-      </div>
-    )
   }
 
   return (
