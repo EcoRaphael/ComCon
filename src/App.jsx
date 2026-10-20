@@ -12,6 +12,7 @@ import AppLayout      from '@/components/layout/AppLayout'
 import DriverLayout   from '@/components/driver/DriverLayout'
 import DriverDocumentUpload from '@/components/driver/DriverDocumentUpload'
 import Spinner from '@/components/ui/Spinner'
+import InstallPrompt from '@/components/ui/InstallPrompt'
 
 // Commuter pages
 import Home       from '@/components/pages/Home'
@@ -144,6 +145,9 @@ export default function App() {
           {/* Fallback — redirect based on role */}
           <Route path="*" element={<RoleRedirect />} />
         </Routes>
+
+        {/* "Install the app" card: Install button on Chrome/Edge, Share steps on iPhone */}
+        <InstallPrompt />
       </ToastProvider>
     </AuthProvider>
   )
