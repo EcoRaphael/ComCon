@@ -9,7 +9,7 @@ import Spinner from '@/components/ui/Spinner'
 import RideMap from '@/components/ui/RideMap'
 import UserAvatar from '@/components/ui/UserAvatar'
 import PaymentMethodBadges from '@/components/ui/PaymentMethodBadges'
-import BottomSheet from '@/components/ui/BottomSheet'
+import Modal from '@/components/ui/Modal'
 
 const STATUS_COLORS = {
   pending:   'badge-amber',
@@ -286,7 +286,7 @@ export default function MyRides() {
 
       {/* ── Cancel Modal ── */}
       {cancelTarget && (
-        <BottomSheet>
+        <Modal onClose={() => setCancelTarget(null)}>
             <h3 className="font-black text-navy text-lg mb-2">Cancel Booking?</h3>
             <p className="text-sm text-sub mb-5">
               Cancel your ride from <strong>{cancelTarget.pickup}</strong> to <strong>{cancelTarget.dropoff}</strong>?
@@ -301,12 +301,12 @@ export default function MyRides() {
                 {cancelling ? <Spinner size={18} /> : <><Ban size={16} /> Yes, Cancel</>}
               </button>
             </div>
-        </BottomSheet>
+        </Modal>
       )}
 
       {/* ── Rating Modal ── */}
       {ratingTarget && (
-        <BottomSheet>
+        <Modal onClose={() => setRatingTarget(null)}>
             <div className="flex items-center justify-between mb-5">
               <h3 className="font-black text-navy text-lg">Rate Your Ride</h3>
               <button onClick={() => setRatingTarget(null)}><X size={22} className="text-sub" /></button>
@@ -339,12 +339,12 @@ export default function MyRides() {
               className="btn-primary w-full py-4 flex items-center justify-center gap-2 text-base disabled:opacity-50">
               {submitting ? <Spinner size={22} /> : <><Star size={18} /> Submit Rating</>}
             </button>
-        </BottomSheet>
+        </Modal>
       )}
 
       {/* ── Report Modal ── */}
       {reportTarget && (
-        <BottomSheet>
+        <Modal onClose={() => setReportTarget(null)}>
             <div className="flex items-center justify-between mb-5">
               <h3 className="font-black text-navy text-lg">Report a Problem</h3>
               <button onClick={() => setReportTarget(null)}><X size={22} className="text-sub" /></button>
@@ -414,7 +414,7 @@ export default function MyRides() {
               className="w-full py-4 rounded-2xl bg-red-500 text-white font-bold flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95 transition-all">
               {submittingReport ? <Spinner size={20} /> : <><AlertTriangle size={18} /> Submit Report</>}
             </button>
-        </BottomSheet>
+        </Modal>
       )}
     </div>
   )
