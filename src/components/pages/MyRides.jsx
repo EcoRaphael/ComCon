@@ -56,6 +56,9 @@ export default function MyRides() {
   const [reportTarget,     setReportTarget]     = useState(null)
   const [reportType,       setReportType]       = useState([])
   const [reportDesc,       setReportDesc]       = useState('')
+  // "Did this put you in danger or hurt you?", asked when the commuter chooses Other.
+  // null = not answered yet, true = Yes, false = No.
+  const [reportDanger,     setReportDanger]     = useState(null)
   const [submittingReport, setSubmittingReport] = useState(false)
 
   useEffect(() => {
@@ -139,9 +142,17 @@ export default function MyRides() {
     }
   }
 
+  // The description box is always shown. Choosing "Other" is what makes it required:
+  // the specific issue types already say what happened, but "Other" says nothing,
+  // so the commuter has to describe it, and also say whether it put them in
+  // danger. A Yes makes the report High straight away (the database applies it).
+  // For every other type both are optional or not asked.
+  const needsDescription = reportType.includes('Other')
+
   async function handleReport() {
     if (reportType.length === 0) { toast('Please select at least one issue type', 'error'); return }
-    if (!reportDesc.trim()) { toast('Please describe the issue', 'error'); return }
+    if (needsDescription && reportDanger === null) { toast('Please tell us whether this put you in danger or hurt you', 'error'); return }
+    if (needsDescription && !reportDesc.trim()) { toast('Please describe the issue', 'error'); return }
     setSubmittingReport(true)
     try {
       // One report per ride, not one report per driver ever — a
@@ -157,13 +168,15 @@ export default function MyRides() {
         driver_id:   reportTarget.drivers?.id || null,
         booking_id:  reportTarget.id,
         issue_type:  reportType,
-        description: reportDesc.trim(),
+        description: reportDesc.trim() || null,   // empty stays empty (null) when optional
+        // Sent only when Yes, so a report without it is unchanged from before
+        ...(needsDescription && reportDanger === true ? { safety_concern: true } : {}),
         severity:    'Medium',   // placeholder only: the database sets the real severity from issue_type
         status:      'pending',
       })
       if (error) throw error
       toast('Report submitted. Thank you!', 'success')
-      setReportTarget(null); setReportType([]); setReportDesc('')
+      setReportTarget(null); setReportType([]); setReportDesc(''); setReportDanger(null)
     } catch (err) {
       toast('Failed to submit report: ' + err.message, 'error')
     } finally {
@@ -257,7 +270,7 @@ export default function MyRides() {
                       className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-amber-200 text-amber-700 text-xs font-bold hover:bg-amber-50 transition-colors">
                       <Star size={14} /> Rate
                     </button>
-                    <button onClick={() => { setReportTarget(b); setReportType([]); setReportDesc('') }}
+                    <button onClick={() => { setReportTarget(b); setReportType([]); setReportDesc(''); setReportDanger(null) }}
                       className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-red-200 text-red-600 text-xs font-bold hover:bg-red-50 transition-colors">
                       <Flag size={14} /> Report
                     </button>
@@ -370,13 +383,38 @@ export default function MyRides() {
                 })}
               </div>
             </div>
+            {needsDescription && (
+              <div className="mb-4">
+                <label className="field-label">Did this put you in danger or hurt you? *</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[{ label: 'Yes', value: true }, { label: 'No', value: false }].map(o => (
+                    <button key={o.label} type="button" onClick={() => setReportDanger(o.value)}
+                      className={`py-2.5 rounded-xl border-2 text-xs font-bold transition-all ${
+                        reportDanger !== o.value ? 'border-border text-sub' :
+                        o.value ? 'border-red-400 bg-red-50 text-red-700' : 'border-green bg-green-light text-green'
+                      }`}>
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+                {reportDanger === true && (
+                  <p className="text-xs text-red-600 mt-2 leading-relaxed">
+                    We will treat this as a serious report and review it first. If you are in danger right now, please call 911.
+                  </p>
+                )}
+              </div>
+            )}
             <div className="mb-5">
-              <label className="field-label">Describe the issue *</label>
+              <label className="field-label">
+                {needsDescription ? 'Describe the issue *' : 'Describe the issue (optional)'}
+              </label>
               <textarea className="field-input h-24 py-3 resize-none"
-                placeholder="What happened? Please be specific..."
+                placeholder={needsDescription
+                  ? 'You chose Other, so please tell us what happened...'
+                  : 'What happened? Please be specific...'}
                 value={reportDesc} onChange={e => setReportDesc(e.target.value)} />
             </div>
-            <button onClick={handleReport} disabled={submittingReport || reportType.length === 0 || !reportDesc.trim()}
+            <button onClick={handleReport} disabled={submittingReport || reportType.length === 0 || (needsDescription && (reportDanger === null || !reportDesc.trim()))}
               className="w-full py-4 rounded-2xl bg-red-500 text-white font-bold flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95 transition-all">
               {submittingReport ? <Spinner size={20} /> : <><AlertTriangle size={18} /> Submit Report</>}
             </button>
