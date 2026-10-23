@@ -158,7 +158,7 @@ export default function MyRides() {
         booking_id:  reportTarget.id,
         issue_type:  reportType,
         description: reportDesc.trim(),
-        severity:    'Medium',
+        severity:    'Medium',   // placeholder only: the database sets the real severity from issue_type
         status:      'pending',
       })
       if (error) throw error
@@ -352,7 +352,11 @@ export default function MyRides() {
             <div className="mb-4">
               <label className="field-label">Issue Type * (select all that apply)</label>
               <div className="grid grid-cols-2 gap-2">
-                {['Overcharging','Reckless Driving','Discourtesy','No Show','Wrong Route','Other'].map(t => {
+                {/* Serious safety issues first. Keep this list in step with the admin app's
+                    src/lib/severity.js and the issue_severity() SQL function: the database
+                    rates each report from these names, and any name missing there counts
+                    as Medium. */}
+                {['Reckless Driving','Harassment','Driving Under the Influence','Accident or Injury','Unsafe Vehicle','Overcharging','No Show','Wrong Route','Discourtesy','Other'].map(t => {
                   const selected = reportType.includes(t)
                   return (
                     <button key={t} type="button"
