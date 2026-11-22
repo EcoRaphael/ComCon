@@ -32,6 +32,15 @@ function getErrorMessage(err) {
   return 'Something went wrong. Please try again.'
 }
 
+// Report each login attempt to the Docker container's log (shows in Dozzle).
+// Only the portal, email, result and reason are sent, never the password.
+// Fails silently anywhere /log-login doesn't exist (e.g. Vercel).
+function logLogin(portal, status, email, reason = '') {
+  const params = new URLSearchParams({ portal, status, email: (email || '').trim() })
+  if (reason) params.set('reason', reason)
+  fetch(`/log-login?${params}`, { keepalive: true }).catch(() => {})
+}
+
 
 // ── Wrong Portal Screen ─────────────────────────────────────────
 function WrongPortalScreen({ wrongRole, onGoCorrect, onBack }) {
@@ -286,10 +295,15 @@ function CommuterPanel({ onBack, onSwitch }) {
         await supabase.auth.signOut()
         // NOW set wrong role — component stays mounted because role is still 'commuter'
         setWrongRole('driver')
+        logLogin('commuter', 'WRONG_PORTAL', lf.email, 'driver account')
         return
       }
+      logLogin('commuter', 'SUCCESS', lf.email)
       navigate('/', { replace: true })
-    } catch (err) { setError(getErrorMessage(err)) }
+    } catch (err) {
+      logLogin('commuter', 'FAILED', lf.email, getErrorMessage(err))
+      setError(getErrorMessage(err))
+    }
     finally { setLoading(false) }
   }
 
@@ -815,10 +829,15 @@ function DriverPanel({ onBack, onSwitch }) {
       if (row.role !== 'driver') {
         markWrongRole('customer')        // set BEFORE signOut to survive re-render
         supabase.auth.signOut()          // fire-and-forget, no await
+        logLogin('driver', 'WRONG_PORTAL', lf.email, 'commuter account')
         return
       }
+      logLogin('driver', 'SUCCESS', lf.email)
       navigate('/driver', { replace: true })
-    } catch (err) { setError(getErrorMessage(err)) }
+    } catch (err) {
+      logLogin('driver', 'FAILED', lf.email, getErrorMessage(err))
+      setError(getErrorMessage(err))
+    }
     finally { setLoading(false) }
   }
 

@@ -10,6 +10,7 @@ import LocationPicker from '@/components/ui/LocationPicker'
 import CurrentLocationPicker from '@/components/ui/CurrentLocationPicker'
 import UserAvatar from '@/components/ui/UserAvatar'
 import PaymentMethodBadges from '@/components/ui/PaymentMethodBadges'
+import { logEvent } from '@/lib/logEvent'
 
 const VEHICLE_ICONS = { Tricycle: Car, Timbol: Bus, Multicab: Bus }
 const METHOD_META = {
@@ -121,10 +122,24 @@ export default function RoutesPage() {
         payment_method: method,
       })
       if (error) throw error
+      // Log for monitoring (Dozzle). Pickup/dropoff are deliberately left
+      // out — exact locations are sensitive personal data.
+      logEvent('BOOKING_CREATED', {
+        user: profile?.email || profile?.id,
+        driver_id: driver.id,
+        vehicle: vehicle,
+        fare: estimatedFare.toFixed(2),
+        payment: method,
+      })
       toast('Booking placed! Waiting for driver.', 'success')
       closeModal()
       navigate('/my-rides')
     } catch (err) {
+      logEvent('BOOKING_FAILED', {
+        user: profile?.email || profile?.id,
+        driver_id: driver?.id,
+        reason: err?.message,
+      })
       toast('Booking failed: ' + err.message, 'error')
     } finally {
       setBooking(false)
@@ -559,4 +574,4 @@ export default function RoutesPage() {
       )}
     </div>
   )
-} 
+}
